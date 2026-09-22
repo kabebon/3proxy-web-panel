@@ -34,7 +34,7 @@ func InitTemplates(dir string) error {
 
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
-		"deref": func(p *int) int {
+		"derefInt": func(p *int) int {
 			if p == nil {
 				return 0
 			}
