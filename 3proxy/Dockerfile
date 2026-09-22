@@ -3,7 +3,7 @@ FROM alpine:edge
 RUN apk add --no-cache 3proxy --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
 
 # Create required directories
-RUN mkdir -p /etc/3proxy /var/log/3proxy
+RUN mkdir -p /etc/3proxy
 
 # Write a minimal bootstrap config (will be overwritten by panel)
 RUN echo 'nserver 8.8.8.8' > /etc/3proxy/3proxy.cfg && \
