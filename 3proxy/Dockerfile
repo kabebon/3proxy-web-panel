@@ -1,6 +1,6 @@
-FROM alpine:3.19
+FROM alpine:edge
 
-RUN apk add --no-cache 3proxy
+RUN apk add --no-cache 3proxy --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
 
 # Create required directories
 RUN mkdir -p /etc/3proxy /var/log/3proxy
