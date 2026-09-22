@@ -11,8 +11,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func AuthHandlers(pool *pgxpool.Pool) http.Handler {
-	r := chi.NewRouter()
+func RegisterAuth(r chi.Router, pool *pgxpool.Pool) {
 
 	// GET /login
 	r.Get("/login", func(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +91,4 @@ func AuthHandlers(pool *pgxpool.Pool) http.Handler {
 		})
 		http.Redirect(w, r, "/login", http.StatusFound)
 	})
-
-	return r
 }

@@ -10,8 +10,7 @@ import (
 	"panel/proxy"
 )
 
-func DashboardHandlers(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
-	r := chi.NewRouter()
+func RegisterDashboard(r chi.Router, pool *pgxpool.Pool, cfg *config.Config) {
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		var userCount, upstreamCount, listenerCount, groupCount int
@@ -56,6 +55,4 @@ func DashboardHandlers(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprint(w, `<div class="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded-md text-sm flex items-center space-x-2"><span>✓ Config applied and 3proxy reloaded successfully.</span></div>`)
 	})
-
-	return r
 }

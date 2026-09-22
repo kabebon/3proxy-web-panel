@@ -44,13 +44,13 @@ func main() {
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	// Auth routes (public)
-	r.Mount("/", handlers.AuthHandlers(pool))
+	handlers.RegisterAuth(r, pool)
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(pool))
 
-		r.Mount("/", handlers.DashboardHandlers(pool, cfg))
+		handlers.RegisterDashboard(r, pool, cfg)
 		r.Mount("/users", handlers.UsersHandlers(pool))
 		r.Mount("/upstreams", handlers.UpstreamsHandlers(pool))
 		r.Mount("/groups", handlers.GroupsHandlers(pool))
