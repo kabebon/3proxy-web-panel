@@ -2,12 +2,15 @@ package db
 
 import (
 	"context"
-	"os"
+	_ "embed"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 	"panel/config"
 )
+
+//go:embed migrations/001_init.sql
+var initSQL string
 
 func InitDB(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.New(ctx, cfg.DBUrl)
@@ -18,11 +21,7 @@ func InitDB(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
 }
 
 func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
-	content, err := os.ReadFile("db/migrations/001_init.sql")
-	if err != nil {
-		return err
-	}
-	_, err = pool.Exec(ctx, string(content))
+	_, err := pool.Exec(ctx, initSQL)
 	return err
 }
 
