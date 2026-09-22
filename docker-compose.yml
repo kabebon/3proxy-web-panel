@@ -39,8 +39,6 @@ services:
       - proxy_config:/etc/3proxy
       - proxy_logs:/var/log/3proxy
       - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - panel_net
 
   proxy:
     build:
@@ -59,7 +57,3 @@ volumes:
   db_data:
   proxy_config:
   proxy_logs:
-
-networks:
-  panel_net:
-    driver: bridge
