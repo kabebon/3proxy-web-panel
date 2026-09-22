@@ -1,0 +1,68 @@
+{{define "dashboard.html"}}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-sm flex items-center justify-between">
+        <div>
+            <p class="text-sm font-medium text-slate-400 mb-1">Total Users</p>
+            <p class="text-3xl font-bold text-white">{{.UserCount}}</p>
+        </div>
+        <div class="p-3 bg-indigo-500/10 rounded-full text-indigo-500">
+            <i data-lucide="users" class="w-8 h-8"></i>
+        </div>
+    </div>
+    
+    <div class="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-sm flex items-center justify-between">
+        <div>
+            <p class="text-sm font-medium text-slate-400 mb-1">Active Listeners</p>
+            <p class="text-3xl font-bold text-white">{{.ListenerCount}}</p>
+        </div>
+        <div class="p-3 bg-green-500/10 rounded-full text-green-500">
+            <i data-lucide="radio" class="w-8 h-8"></i>
+        </div>
+    </div>
+    
+    <div class="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-sm flex items-center justify-between">
+        <div>
+            <p class="text-sm font-medium text-slate-400 mb-1">Upstreams</p>
+            <p class="text-3xl font-bold text-white">{{.UpstreamCount}}</p>
+        </div>
+        <div class="p-3 bg-blue-500/10 rounded-full text-blue-500">
+            <i data-lucide="network" class="w-8 h-8"></i>
+        </div>
+    </div>
+    
+    <div class="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-sm flex items-center justify-between">
+        <div>
+            <p class="text-sm font-medium text-slate-400 mb-1">3proxy Status</p>
+            {{if .IsRunning}}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-green-500/10 text-green-500">
+                    Running
+                </span>
+            {{else}}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-red-500/10 text-red-500">
+                    Stopped
+                </span>
+            {{end}}
+        </div>
+        <div class="p-3 {{if .IsRunning}}bg-green-500/10 text-green-500{{else}}bg-red-500/10 text-red-500{{end}} rounded-full">
+            <i data-lucide="activity" class="w-8 h-8"></i>
+        </div>
+    </div>
+</div>
+
+<div class="bg-slate-800 rounded-lg border border-slate-700 shadow-sm p-6 max-w-2xl">
+    <h2 class="text-xl font-semibold text-white mb-4">Apply Configuration</h2>
+    <p class="text-slate-400 mb-6">
+        <i data-lucide="alert-triangle" class="w-4 h-4 inline-block mr-1 text-yellow-500"></i>
+        Changes made to users, listeners, upstreams, or groups require applying the configuration to take effect in 3proxy.
+    </p>
+    <form>
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="button" hx-post="/proxy/apply" hx-target="#dashboard-apply-result" hx-indicator="#dash-apply-indicator" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-3 px-6 rounded-md shadow flex items-center space-x-2 transition-colors">
+            <i data-lucide="play" class="w-5 h-5"></i>
+            <span>Apply Config & Restart Service</span>
+            <i data-lucide="loader-2" class="w-5 h-5 animate-spin htmx-indicator" id="dash-apply-indicator"></i>
+        </button>
+    </form>
+    <div id="dashboard-apply-result" class="mt-4"></div>
+</div>
+{{end}}

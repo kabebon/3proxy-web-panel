@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: 3proxy-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-panel}
+      POSTGRES_USER: ${DB_USER:-panel}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-panel} -d ${DB_NAME:-panel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  panel:
+    build:
+      context: ./panel
+      dockerfile: Dockerfile
+    container_name: 3proxy-panel
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_URL: postgres://${DB_USER:-panel}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-panel}?sslmode=disable
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      SECRET_KEY: ${SECRET_KEY:-supersecretkey32charslong123456}
+      PORT: "8080"
+      PROXY_CONTAINER_NAME: "3proxy-proxy"
+      PROXY_CONFIG_PATH: "/etc/3proxy/3proxy.cfg"
+      PROXY_LOG_PATH: "/var/log/3proxy/3proxy.log"
+    ports:
+      - "${PANEL_PORT:-8080}:8080"
+    volumes:
+      - proxy_config:/etc/3proxy
+      - proxy_logs:/var/log/3proxy
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - panel_net
+
+  proxy:
+    build:
+      context: ./3proxy
+      dockerfile: Dockerfile
+    container_name: 3proxy-proxy
+    restart: unless-stopped
+    depends_on:
+      - panel
+    volumes:
+      - proxy_config:/etc/3proxy
+      - proxy_logs:/var/log/3proxy
+    ports:
+      - "3128:3128"   # HTTP proxy (default listener)
+      - "1080:1080"   # SOCKS5 proxy (default listener)
+      # Add more ports as needed via panel listeners
+    networks:
+      - panel_net
+
+volumes:
+  db_data:
+  proxy_config:
+  proxy_logs:
+
+networks:
+  panel_net:
+    driver: bridge

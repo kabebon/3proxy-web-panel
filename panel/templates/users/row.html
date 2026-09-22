@@ -1,0 +1,52 @@
+{{define "user-row"}}
+<tr class="hover:bg-slate-700/50 transition-colors">
+    <td class="p-4 font-medium text-white">{{.Username}}</td>
+    <td class="p-4 text-slate-300">
+        {{if .Listener}}
+            {{.Listener.Name}} ({{.Listener.Port}}/{{.Listener.Protocol}})
+        {{else}}
+            <span class="text-slate-500 italic">None</span>
+        {{end}}
+    </td>
+    <td class="p-4 text-slate-300">
+        {{if eq .BandwidthIn 0}}Unlimited{{else}}{{.BandwidthIn}} KB/s{{end}} / 
+        {{if eq .BandwidthOut 0}}Unlimited{{else}}{{.BandwidthOut}} KB/s{{end}}
+    </td>
+    <td class="p-4 text-slate-300">
+        {{if .AllowedIPs}}
+            <span class="truncate max-w-xs block" title="{{.AllowedIPs}}">{{.AllowedIPs}}</span>
+        {{else}}
+            <span class="text-slate-500 italic">Any</span>
+        {{end}}
+    </td>
+    <td class="p-4">
+        {{if .Enabled}}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-500 border border-green-500/20">Active</span>
+        {{else}}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/10 text-red-500 border border-red-500/20">Disabled</span>
+        {{end}}
+    </td>
+    <td class="p-4 text-slate-300">
+        {{if .ExpiresAt}}
+            {{.ExpiresAt.Format "2006-01-02 15:04"}}
+        {{else}}
+            <span class="text-slate-500 italic">Never</span>
+        {{end}}
+    </td>
+    <td class="p-4 text-right space-x-2">
+        <button hx-get="/users/{{.ID}}/edit" hx-target="closest tr" hx-swap="outerHTML" class="text-indigo-400 hover:text-indigo-300 transition-colors" title="Edit">
+            <i data-lucide="pencil" class="w-4 h-4 inline"></i>
+        </button>
+        <button hx-post="/users/{{.ID}}/toggle" hx-target="closest tr" hx-swap="outerHTML" class="text-slate-400 hover:text-white transition-colors" title="Toggle Status">
+            {{if .Enabled}}
+                <i data-lucide="eye-off" class="w-4 h-4 inline"></i>
+            {{else}}
+                <i data-lucide="eye" class="w-4 h-4 inline"></i>
+            {{end}}
+        </button>
+        <button hx-delete="/users/{{.ID}}" hx-confirm="Are you sure you want to delete user '{{.Username}}'?" hx-target="closest tr" hx-swap="outerHTML swap:300ms" class="text-red-400 hover:text-red-300 transition-colors" title="Delete">
+            <i data-lucide="trash-2" class="w-4 h-4 inline"></i>
+        </button>
+    </td>
+</tr>
+{{end}}

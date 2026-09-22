@@ -1,0 +1,112 @@
+{{define "listener-form"}}
+{{if .IsEdit}}
+<tr id="listener-edit-row">
+    <td colspan="6" class="p-4 bg-slate-800">
+{{else}}
+<div class="bg-slate-800 p-6 rounded-lg border border-slate-700 mb-6 shadow-sm">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-medium text-white">Add New Listener</h3>
+        <button onclick="document.getElementById('form-container').innerHTML = ''" class="text-slate-400 hover:text-white">
+            <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+    </div>
+{{end}}
+
+    <form {{if .IsEdit}}hx-put="/listeners/{{.Listener.ID}}" hx-target="closest tr" hx-swap="outerHTML"{{else}}hx-post="/listeners" hx-target="#form-container"{{end}} class="space-y-4">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Name</label>
+                <input type="text" name="name" value="{{if .Listener}}{{.Listener.Name}}{{end}}" required class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Protocol</label>
+                <select name="protocol" required class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="http" {{if .Listener}}{{if eq .Listener.Protocol "http"}}selected{{end}}{{end}}>HTTP Proxy (proxy)</option>
+                    <option value="socks5" {{if .Listener}}{{if eq .Listener.Protocol "socks5"}}selected{{end}}{{end}}>SOCKS5 Proxy (socks)</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Port</label>
+                <input type="number" name="port" min="1" max="65535" value="{{if .Listener}}{{.Listener.Port}}{{end}}" required class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Bind IP (Optional)</label>
+                <input type="text" name="bind_ip" value="{{if .Listener}}{{.Listener.BindIP}}{{end}}" placeholder="0.0.0.0" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div x-data="{ mode: '{{if .Listener}}{{if .Listener.UpstreamID}}upstream{{else if .Listener.UpstreamGroupID}}group{{else}}direct{{end}}{{else}}direct{{end}}' }" class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-700 pt-4 mt-2">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Upstream Assignment</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="assignment_type" value="direct" x-model="mode" class="w-4 h-4 text-indigo-600 bg-slate-900 border-slate-700 focus:ring-indigo-500">
+                            <span class="text-sm text-slate-300">Direct (No Upstream)</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="assignment_type" value="upstream" x-model="mode" class="w-4 h-4 text-indigo-600 bg-slate-900 border-slate-700 focus:ring-indigo-500">
+                            <span class="text-sm text-slate-300">Single Upstream</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="assignment_type" value="group" x-model="mode" class="w-4 h-4 text-indigo-600 bg-slate-900 border-slate-700 focus:ring-indigo-500">
+                            <span class="text-sm text-slate-300">Upstream Group</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div x-show="mode === 'upstream'" x-cloak>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Select Upstream</label>
+                    <select name="upstream_id" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="">-- Select Upstream --</option>
+                        {{range .Upstreams}}
+                        <option value="{{.ID}}" {{if $.Listener}}{{if $.Listener.UpstreamID}}{{if eq (derefInt $.Listener.UpstreamID) .ID}}selected{{end}}{{end}}{{end}}>{{.Name}} ({{.Host}}:{{.Port}})</option>
+                        {{end}}
+                    </select>
+                </div>
+                
+                <div x-show="mode === 'group'" x-cloak>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Select Group</label>
+                    <select name="upstream_group_id" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="">-- Select Group --</option>
+                        {{range .Groups}}
+                        <option value="{{.ID}}" {{if $.Listener}}{{if $.Listener.UpstreamGroupID}}{{if eq (derefInt $.Listener.UpstreamGroupID) .ID}}selected{{end}}{{end}}{{end}}>{{.Name}}</option>
+                        {{end}}
+                    </select>
+                </div>
+            </div>
+            
+            <div class="flex items-end pb-2 md:col-span-2">
+                <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" name="enabled" value="true" {{if .Listener}}{{if .Listener.Enabled}}checked{{end}}{{else}}checked{{end}} class="w-4 h-4 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
+                    <span class="text-sm font-medium text-slate-300">Enabled</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="flex justify-end space-x-3 pt-4 border-t border-slate-700 mt-4">
+            {{if .IsEdit}}
+            <button type="button" hx-get="/listeners/{{.Listener.ID}}" hx-target="closest tr" hx-swap="outerHTML" class="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-md transition-colors">
+                Cancel
+            </button>
+            {{else}}
+            <button type="button" onclick="document.getElementById('form-container').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-md transition-colors">
+                Cancel
+            </button>
+            {{end}}
+            <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-md shadow flex items-center space-x-2 transition-colors">
+                <i data-lucide="save" class="w-4 h-4"></i>
+                <span>Save Listener</span>
+            </button>
+        </div>
+    </form>
+
+{{if .IsEdit}}
+    </td>
+</tr>
+{{else}}
+</div>
+{{end}}
+{{end}}

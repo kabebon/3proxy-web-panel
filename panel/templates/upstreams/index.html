@@ -1,0 +1,37 @@
+{{define "upstreams/index.html"}}
+<div class="mb-6 flex justify-between items-center">
+    <h2 class="text-xl font-semibold text-white">Upstreams</h2>
+    <button hx-get="/upstreams/new" hx-target="#form-container" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded shadow flex items-center space-x-2 transition-colors">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Add Upstream</span>
+    </button>
+</div>
+
+<div id="form-container" class="mb-6"></div>
+
+<div class="bg-slate-800 rounded-lg border border-slate-700 shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="bg-slate-900/50 border-b border-slate-700 text-slate-400 text-sm">
+                    <th class="p-4 font-medium">Name</th>
+                    <th class="p-4 font-medium">Type</th>
+                    <th class="p-4 font-medium">Host:Port</th>
+                    <th class="p-4 font-medium">Auth</th>
+                    <th class="p-4 font-medium">Status</th>
+                    <th class="p-4 font-medium text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="upstreams-tbody" class="divide-y divide-slate-700 text-sm">
+                {{if .Upstreams}}
+                    {{range .Upstreams}}
+                        {{template "upstream-row" .}}
+                    {{end}}
+                {{else}}
+                    <tr id="empty-state"><td colspan="6" class="p-8 text-center text-slate-500">No upstreams found. Click "Add Upstream" to create one.</td></tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}

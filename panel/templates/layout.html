@@ -1,0 +1,93 @@
+{{define "layout.html"}}
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3proxy Panel</title>
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            700: '#334155',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .htmx-indicator{ display:none; }
+        .htmx-request .htmx-indicator{ display:inline; }
+        .htmx-request.htmx-indicator{ display:inline; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex" x-data="{ toast: { show: false, message: '', type: 'success' } }" @show-toast.window="toast = { show: true, message: $event.detail.message, type: $event.detail.type }; setTimeout(() => toast.show = false, 3000)">
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-slate-800 border-r border-slate-700 fixed h-full flex flex-col">
+        <div class="p-6 border-b border-slate-700 flex items-center space-x-3 text-indigo-500 font-bold text-xl">
+            <i data-lucide="shield-check" class="w-8 h-8"></i>
+            <span>3proxy Panel</span>
+        </div>
+        <nav class="flex-1 p-4 space-y-2">
+            {{template "nav" .}}
+        </nav>
+        <div class="p-4 border-t border-slate-700 text-sm text-slate-400 text-center flex flex-col space-y-2">
+            <div>User: <span class="text-white">{{.AdminUser.Username}}</span></div>
+            <form hx-post="/login" hx-swap="none">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <button type="button" hx-post="/logout" class="text-slate-400 hover:text-white flex items-center justify-center space-x-2 transition-colors w-full">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    <span>Logout</span>
+                </button>
+            </form>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-64 flex-1 flex flex-col min-h-screen">
+        <header class="bg-slate-800 border-b border-slate-700 p-6 flex justify-between items-center h-20">
+            <h1 class="text-2xl font-semibold text-white capitalize">{{.CurrentPage}}</h1>
+            <div class="flex items-center space-x-4">
+                <span class="text-slate-400 text-sm hidden" id="apply-warning">Changes require applying config</span>
+                <form>
+                    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                    <button type="button" hx-post="/proxy/apply" hx-target="#apply-result" hx-indicator="#apply-indicator" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded shadow flex items-center space-x-2 transition-colors">
+                        <i data-lucide="play" class="w-4 h-4"></i>
+                        <span>Apply Config</span>
+                        <i data-lucide="loader-2" class="w-4 h-4 animate-spin htmx-indicator" id="apply-indicator"></i>
+                    </button>
+                </form>
+            </div>
+        </header>
+
+        <div class="p-6 flex-1 overflow-auto">
+            <div id="apply-result" class="mb-4"></div>
+            {{.Content}}
+        </div>
+    </main>
+
+    {{template "toast" .}}
+
+    <script>
+        lucide.createIcons();
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            lucide.createIcons();
+        });
+        document.body.addEventListener('htmx:configRequest', function(evt) {
+            evt.detail.headers['X-CSRF-Token'] = '{{.CSRFToken}}';
+        });
+    </script>
+</body>
+</html>
+{{end}}

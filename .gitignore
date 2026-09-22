@@ -1,0 +1,14 @@
+.env
+.session_cookie
+panel/panel
+panel/panel.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+.idea/
+.vscode/
+*.log

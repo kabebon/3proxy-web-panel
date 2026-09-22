@@ -1,0 +1,88 @@
+{{define "upstream-form"}}
+{{if .IsEdit}}
+<tr id="upstream-edit-row">
+    <td colspan="6" class="p-4 bg-slate-800">
+{{else}}
+<div class="bg-slate-800 p-6 rounded-lg border border-slate-700 mb-6 shadow-sm">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-medium text-white">Add New Upstream</h3>
+        <button onclick="document.getElementById('form-container').innerHTML = ''" class="text-slate-400 hover:text-white">
+            <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+    </div>
+{{end}}
+
+    <form {{if .IsEdit}}hx-put="/upstreams/{{.Upstream.ID}}" hx-target="closest tr" hx-swap="outerHTML"{{else}}hx-post="/upstreams" hx-target="#form-container"{{end}} class="space-y-4">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Name</label>
+                <input type="text" name="name" value="{{if .Upstream}}{{.Upstream.Name}}{{end}}" required class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Type</label>
+                <select name="type" required class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="http" {{if .Upstream}}{{if eq .Upstream.Type "http"}}selected{{end}}{{end}}>HTTP Proxy</option>
+                    <option value="socks5" {{if .Upstream}}{{if eq .Upstream.Type "socks5"}}selected{{end}}{{end}}>SOCKS5 Proxy</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Host (IP or Domain)</label>
+                <input type="text" name="host" value="{{if .Upstream}}{{.Upstream.Host}}{{end}}" required class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Port</label>
+                <input type="number" name="port" min="1" max="65535" value="{{if .Upstream}}{{.Upstream.Port}}{{end}}" required class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Username (Optional)</label>
+                <input type="text" name="username" value="{{if .Upstream}}{{.Upstream.Username}}{{end}}" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div x-data="{ show: false }">
+                <label class="block text-sm font-medium text-slate-300 mb-1">Password (Optional)</label>
+                <div class="relative">
+                    <input :type="show ? 'text' : 'password'" name="password" placeholder="{{if .IsEdit}}Leave blank to keep unchanged{{end}}" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-10">
+                    <button type="button" @click="show = !show" class="absolute right-3 top-2.5 text-slate-400 hover:text-white">
+                        <i data-lucide="eye" x-show="!show" class="w-4 h-4"></i>
+                        <i data-lucide="eye-off" x-show="show" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="flex items-end pb-2">
+                <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" name="enabled" value="true" {{if .Upstream}}{{if .Upstream.Enabled}}checked{{end}}{{else}}checked{{end}} class="w-4 h-4 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
+                    <span class="text-sm font-medium text-slate-300">Enabled</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="flex justify-end space-x-3 pt-4 border-t border-slate-700">
+            {{if .IsEdit}}
+            <button type="button" hx-get="/upstreams/{{.Upstream.ID}}" hx-target="closest tr" hx-swap="outerHTML" class="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-md transition-colors">
+                Cancel
+            </button>
+            {{else}}
+            <button type="button" onclick="document.getElementById('form-container').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-md transition-colors">
+                Cancel
+            </button>
+            {{end}}
+            <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-md shadow flex items-center space-x-2 transition-colors">
+                <i data-lucide="save" class="w-4 h-4"></i>
+                <span>Save Upstream</span>
+            </button>
+        </div>
+    </form>
+
+{{if .IsEdit}}
+    </td>
+</tr>
+{{else}}
+</div>
+{{end}}
+{{end}}

@@ -1,0 +1,26 @@
+{{define "nav"}}
+<a href="/dashboard" class="flex items-center space-x-3 px-3 py-2 rounded-md transition-colors {{if eq .CurrentPage "dashboard"}}bg-indigo-500/10 text-indigo-500{{else}}text-slate-400 hover:text-slate-100 hover:bg-slate-700{{end}}">
+    <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+    <span>Dashboard</span>
+</a>
+<a href="/users" class="flex items-center space-x-3 px-3 py-2 rounded-md transition-colors {{if eq .CurrentPage "users"}}bg-indigo-500/10 text-indigo-500{{else}}text-slate-400 hover:text-slate-100 hover:bg-slate-700{{end}}">
+    <i data-lucide="users" class="w-5 h-5"></i>
+    <span>Users</span>
+</a>
+<a href="/listeners" class="flex items-center space-x-3 px-3 py-2 rounded-md transition-colors {{if eq .CurrentPage "listeners"}}bg-indigo-500/10 text-indigo-500{{else}}text-slate-400 hover:text-slate-100 hover:bg-slate-700{{end}}">
+    <i data-lucide="radio" class="w-5 h-5"></i>
+    <span>Listeners</span>
+</a>
+<a href="/upstreams" class="flex items-center space-x-3 px-3 py-2 rounded-md transition-colors {{if eq .CurrentPage "upstreams"}}bg-indigo-500/10 text-indigo-500{{else}}text-slate-400 hover:text-slate-100 hover:bg-slate-700{{end}}">
+    <i data-lucide="network" class="w-5 h-5"></i>
+    <span>Upstreams</span>
+</a>
+<a href="/groups" class="flex items-center space-x-3 px-3 py-2 rounded-md transition-colors {{if eq .CurrentPage "groups"}}bg-indigo-500/10 text-indigo-500{{else}}text-slate-400 hover:text-slate-100 hover:bg-slate-700{{end}}">
+    <i data-lucide="layers" class="w-5 h-5"></i>
+    <span>Groups</span>
+</a>
+<a href="/stats" class="flex items-center space-x-3 px-3 py-2 rounded-md transition-colors {{if eq .CurrentPage "stats"}}bg-indigo-500/10 text-indigo-500{{else}}text-slate-400 hover:text-slate-100 hover:bg-slate-700{{end}}">
+    <i data-lucide="bar-chart-2" class="w-5 h-5"></i>
+    <span>Stats</span>
+</a>
+{{end}}

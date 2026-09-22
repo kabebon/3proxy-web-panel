@@ -1,0 +1,63 @@
+{{define "login.html"}}
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - 3proxy Panel</title>
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            700: '#334155',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-900 min-h-screen flex items-center justify-center">
+    <div class="bg-slate-800 p-8 rounded-lg border border-slate-700 shadow-xl w-full max-w-md">
+        <div class="flex flex-col items-center mb-8 text-indigo-500">
+            <i data-lucide="shield-check" class="w-16 h-16 mb-4"></i>
+            <h1 class="text-2xl font-bold text-white">3proxy Panel</h1>
+        </div>
+        
+        <form hx-post="/login" hx-target="body" hx-swap="outerHTML" class="space-y-6">
+            <div>
+                <label for="username" class="block text-sm font-medium text-slate-300 mb-1">Username</label>
+                <input type="text" id="username" name="username" required class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+            </div>
+            
+            <div>
+                <label for="password" class="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                <input type="password" id="password" name="password" required class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+            </div>
+            
+            {{if .Error}}
+            <div class="bg-red-900/50 border border-red-700 text-red-300 text-sm px-3 py-2 rounded-md">
+                {{.Error}}
+            </div>
+            {{end}}
+            
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-md transition-colors flex justify-center items-center">
+                <span>Login</span>
+            </button>
+        </form>
+    </div>
+    
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
+{{end}}

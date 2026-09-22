@@ -1,0 +1,95 @@
+{{define "user-form"}}
+{{if .IsEdit}}
+<tr id="user-edit-row">
+    <td colspan="7" class="p-4 bg-slate-800">
+{{else}}
+<div class="bg-slate-800 p-6 rounded-lg border border-slate-700 mb-6 shadow-sm">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-medium text-white">Add New User</h3>
+        <button onclick="document.getElementById('form-container').innerHTML = ''" class="text-slate-400 hover:text-white">
+            <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+    </div>
+{{end}}
+
+    <form {{if .IsEdit}}hx-put="/users/{{.User.ID}}" hx-target="closest tr" hx-swap="outerHTML"{{else}}hx-post="/users" hx-target="#form-container"{{end}} class="space-y-4">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Username</label>
+                <input type="text" name="username" value="{{if .User}}{{.User.Username}}{{end}}" required class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div x-data="{ show: false }">
+                <label class="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                <div class="relative">
+                    <input :type="show ? 'text' : 'password'" name="password" {{if not .IsEdit}}required{{end}} placeholder="{{if .IsEdit}}Leave blank to keep unchanged{{end}}" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-10">
+                    <button type="button" @click="show = !show" class="absolute right-3 top-2.5 text-slate-400 hover:text-white">
+                        <i data-lucide="eye" x-show="!show" class="w-4 h-4"></i>
+                        <i data-lucide="eye-off" x-show="show" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Listener</label>
+                <select name="listener_id" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">-- Select Listener --</option>
+                    {{range .Listeners}}
+                    <option value="{{.ID}}" {{if $.User}}{{if $.User.ListenerID}}{{if eq (derefInt $.User.ListenerID) .ID}}selected{{end}}{{end}}{{end}}>{{.Name}} ({{.Port}}/{{.Protocol}})</option>
+                    {{end}}
+                </select>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Bandwidth In (KB/s)</label>
+                    <input type="number" min="0" name="bandwidth_in" value="{{if .User}}{{.User.BandwidthIn}}{{else}}0{{end}}" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Bandwidth Out (KB/s)</label>
+                    <input type="number" min="0" name="bandwidth_out" value="{{if .User}}{{.User.BandwidthOut}}{{else}}0{{end}}" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Allowed IPs (comma separated)</label>
+                <input type="text" name="allowed_ips" value="{{if .User}}{{.User.AllowedIPs}}{{end}}" placeholder="empty = any" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Expires At</label>
+                <input type="datetime-local" name="expires_at" value="{{if .User}}{{if .User.ExpiresAt}}{{.User.ExpiresAt.Format "2006-01-02T15:04"}}{{end}}{{end}}" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            
+            <div class="flex items-end pb-2">
+                <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" name="enabled" value="true" {{if .User}}{{if .User.Enabled}}checked{{end}}{{else}}checked{{end}} class="w-4 h-4 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
+                    <span class="text-sm font-medium text-slate-300">Enabled</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="flex justify-end space-x-3 pt-4 border-t border-slate-700">
+            {{if .IsEdit}}
+            <button type="button" hx-get="/users/{{.User.ID}}" hx-target="closest tr" hx-swap="outerHTML" class="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-md transition-colors">
+                Cancel
+            </button>
+            {{else}}
+            <button type="button" onclick="document.getElementById('form-container').innerHTML = ''" class="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-md transition-colors">
+                Cancel
+            </button>
+            {{end}}
+            <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-md shadow flex items-center space-x-2 transition-colors">
+                <i data-lucide="save" class="w-4 h-4"></i>
+                <span>Save User</span>
+            </button>
+        </div>
+    </form>
+
+{{if .IsEdit}}
+    </td>
+</tr>
+{{else}}
+</div>
+{{end}}
+{{end}}

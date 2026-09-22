@@ -1,0 +1,16 @@
+{{define "stats-table"}}
+{{if .Entries}}
+    {{range .Entries}}
+    <tr class="hover:bg-slate-700/50 transition-colors">
+        <td class="p-3 text-slate-400">{{.Time}}</td>
+        <td class="p-3 text-indigo-400 font-bold">{{if .User}}{{.User}}{{else}}-{{end}}</td>
+        <td class="p-3 text-slate-300">{{.SourceIP}}</td>
+        <td class="p-3 text-slate-300">{{.Destination}}</td>
+        <td class="p-3 text-slate-300 text-right">{{.BytesSent}}</td>
+        <td class="p-3 text-slate-300 text-right">{{.BytesRecv}}</td>
+    </tr>
+    {{end}}
+{{else}}
+    <tr><td colspan="6" class="p-8 text-center text-slate-500 font-sans">No log entries found.</td></tr>
+{{end}}
+{{end}}
