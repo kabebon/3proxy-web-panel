@@ -81,7 +81,7 @@
 
     <script>
         lucide.createIcons();
-        document.body.addEventListener('htmx:afterSwap', function(evt) {
+        document.body.addEventListener('htmx:afterSettle', function() {
             lucide.createIcons();
         });
         document.body.addEventListener('htmx:configRequest', function(evt) {

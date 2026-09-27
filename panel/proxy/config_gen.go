@@ -93,11 +93,10 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 		for _, u := range listenerUsers {
 			sb.WriteString(fmt.Sprintf("allow %s\n", u))
 		}
-		sb.WriteString("deny *\n")
-
 		for _, b := range bands {
 			sb.WriteString(b + "\n")
 		}
+		sb.WriteString("deny *\n")
 
 		if l.UpstreamID != nil {
 			var u models.Upstream
