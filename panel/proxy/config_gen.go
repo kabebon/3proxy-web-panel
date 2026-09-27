@@ -85,8 +85,6 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 
 	for _, l := range listeners {
 		sb.WriteString(fmt.Sprintf("# Listener %s\n", l.Name))
-		sb.WriteString("auth strong\n")
-		sb.WriteString("flush\n")
 
 		urow, err := pool.Query(ctx, "SELECT username, bandwidth_in, bandwidth_out FROM proxy_users WHERE enabled = TRUE AND (expires_at IS NULL OR expires_at > NOW()) AND listener_id = $1", l.ID)
 		if err != nil {
@@ -109,11 +107,20 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 		}
 		urow.Close()
 
-		// ONE allow entry with the full user list: a 3proxy parent group binds
-		// to the LAST ACL entry, so separate "allow user" lines would leave
-		// everyone but the last-listed user bypassing the chain (direct exit).
 		if len(listenerUsers) > 0 {
+			sb.WriteString("auth strong\n")
+			sb.WriteString("flush\n")
+			// ONE allow entry with the full user list: a 3proxy parent group binds
+			// to the LAST ACL entry, so separate "allow user" lines would leave
+			// everyone but the last-listed user bypassing the chain (direct exit).
 			sb.WriteString("allow " + strings.Join(listenerUsers, ",") + "\n")
+		} else {
+			// Listener with no active users is an open listener (kabebon's
+			// semantics): auth none + allow * instead of an all-denying
+			// auth strong with an empty user list.
+			sb.WriteString("auth none\n")
+			sb.WriteString("flush\n")
+			sb.WriteString("allow *\n")
 		}
 
 		// Parents must come directly after the allow rules: 3proxy attaches the
@@ -209,11 +216,13 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 			}
 		}
 
-		sb.WriteString("deny *\n")
-
+		// bandlim entries must precede "deny *": deny is a terminating ACL
+		// match, so limits emitted after it were never evaluated (kabebon's fix).
 		for _, b := range bands {
 			sb.WriteString(b + "\n")
 		}
+
+		sb.WriteString("deny *\n")
 
 		if l.Protocol == "http" {
 			sb.WriteString(fmt.Sprintf("proxy -p%d -i%s\n", l.Port, l.BindIP))
