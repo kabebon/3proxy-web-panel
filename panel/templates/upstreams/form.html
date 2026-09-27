@@ -56,7 +56,7 @@
             
             <div class="flex items-end pb-2">
                 <label class="flex items-center space-x-2 cursor-pointer">
-                    <input type="checkbox" name="enabled" value="true" {{if .Upstream}}{{if .Upstream.Enabled}}checked{{end}}{{else}}checked{{end}} class="w-4 h-4 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
+                    <input type="checkbox" name="enabled" value="on" {{if .Upstream}}{{if .Upstream.Enabled}}checked{{end}}{{else}}checked{{end}} class="w-4 h-4 bg-slate-900 border-slate-700 rounded text-indigo-600 focus:ring-indigo-500">
                     <span class="text-sm font-medium text-slate-300">Enabled</span>
                 </label>
             </div>

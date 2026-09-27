@@ -60,6 +60,20 @@ func UpstreamsHandlers(pool *pgxpool.Pool) http.Handler {
 		renderTemplate(w, "upstream-row", u)
 	})
 
+	// GET /upstreams/{id} — return row (used by Cancel button in edit form)
+	r.Get("/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		var u models.Upstream
+		err := pool.QueryRow(r.Context(),
+			"SELECT id, name, type, host, port, username, password, enabled FROM upstreams WHERE id = $1", id).
+			Scan(&u.ID, &u.Name, &u.Type, &u.Host, &u.Port, &u.Username, &u.Password, &u.Enabled)
+		if err != nil {
+			http.Error(w, "not found", 404)
+			return
+		}
+		renderTemplate(w, "upstream-row", u)
+	})
+
 	// GET /upstreams/{id}/edit — edit form
 	r.Get("/{id}/edit", func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")

@@ -92,7 +92,24 @@ func ListenersHandlers(pool *pgxpool.Pool) http.Handler {
 		triggerToast(w, "Listener created", "success")
 		w.Header().Set("HX-Reswap", "afterbegin")
 		w.Header().Set("HX-Retarget", "#listeners-tbody")
-		renderTemplate(w, "listener-row", map[string]any{"Listener": l, "UserCount": 0})
+		renderTemplate(w, "listener-row", l)
+	})
+
+	// GET /listeners/{id} — return row (used by Cancel button in edit form)
+	r.Get("/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		listeners, err := loadListeners(r, pool)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		for _, l := range listeners {
+			if strconv.Itoa(l.ID) == id {
+				renderTemplate(w, "listener-row", l)
+				return
+			}
+		}
+		http.Error(w, "not found", 404)
 	})
 
 	// GET /listeners/{id}/edit
@@ -163,7 +180,7 @@ func ListenersHandlers(pool *pgxpool.Pool) http.Handler {
 		pool.QueryRow(r.Context(), "SELECT COUNT(*) FROM proxy_users WHERE listener_id=$1", l.ID).Scan(&userCount)
 
 		triggerToast(w, "Listener updated", "success")
-		renderTemplate(w, "listener-row", map[string]any{"Listener": l, "UserCount": userCount})
+		renderTemplate(w, "listener-row", l)
 	})
 
 	// DELETE /listeners/{id}
@@ -176,6 +193,29 @@ func ListenersHandlers(pool *pgxpool.Pool) http.Handler {
 		}
 		triggerToast(w, "Listener deleted", "success")
 		w.WriteHeader(200)
+	})
+
+	// POST /listeners/{id}/toggle — toggle enabled status
+	r.Post("/{id}/toggle", func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		var l models.Listener
+		err := pool.QueryRow(r.Context(),
+			`UPDATE listeners SET enabled = NOT enabled WHERE id=$1
+			 RETURNING id, name, protocol, port, bind_ip, upstream_id, upstream_group_id, enabled`, id).
+			Scan(&l.ID, &l.Name, &l.Protocol, &l.Port, &l.BindIP, &l.UpstreamID, &l.UpstreamGroupID, &l.Enabled)
+		if err != nil {
+			triggerToast(w, "Error: "+err.Error(), "error")
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		l = enrichListener(r, pool, l)
+
+		status := "disabled"
+		if l.Enabled {
+			status = "enabled"
+		}
+		triggerToast(w, "Listener "+status, "success")
+		renderTemplate(w, "listener-row", l)
 	})
 
 	return r
