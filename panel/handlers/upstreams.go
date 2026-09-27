@@ -94,12 +94,23 @@ func UpstreamsHandlers(pool *pgxpool.Pool) http.Handler {
 		port, _ := strconv.Atoi(r.FormValue("port"))
 		enabled := r.FormValue("enabled") == "on"
 		var u models.Upstream
-		err := pool.QueryRow(r.Context(),
-			`UPDATE upstreams SET name=$1, type=$2, host=$3, port=$4, username=$5, password=$6, enabled=$7
-             WHERE id=$8 RETURNING id, name, type, host, port, username, password, enabled`,
-			r.FormValue("name"), r.FormValue("type"), r.FormValue("host"), port,
-			r.FormValue("username"), r.FormValue("password"), enabled, id,
-		).Scan(&u.ID, &u.Name, &u.Type, &u.Host, &u.Port, &u.Username, &u.Password, &u.Enabled)
+		password := r.FormValue("password")
+		var err error
+		if password == "" {
+			err = pool.QueryRow(r.Context(),
+				`UPDATE upstreams SET name=$1, type=$2, host=$3, port=$4, username=$5, enabled=$6
+				 WHERE id=$7 RETURNING id, name, type, host, port, username, password, enabled`,
+				r.FormValue("name"), r.FormValue("type"), r.FormValue("host"), port,
+				r.FormValue("username"), enabled, id,
+			).Scan(&u.ID, &u.Name, &u.Type, &u.Host, &u.Port, &u.Username, &u.Password, &u.Enabled)
+		} else {
+			err = pool.QueryRow(r.Context(),
+				`UPDATE upstreams SET name=$1, type=$2, host=$3, port=$4, username=$5, password=$6, enabled=$7
+				 WHERE id=$8 RETURNING id, name, type, host, port, username, password, enabled`,
+				r.FormValue("name"), r.FormValue("type"), r.FormValue("host"), port,
+				r.FormValue("username"), password, enabled, id,
+			).Scan(&u.ID, &u.Name, &u.Type, &u.Host, &u.Port, &u.Username, &u.Password, &u.Enabled)
+		}
 		if err != nil {
 			triggerToast(w, "Error: "+err.Error(), "error")
 			http.Error(w, err.Error(), 500)
