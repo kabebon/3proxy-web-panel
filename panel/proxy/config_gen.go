@@ -107,15 +107,15 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 			var u models.Upstream
 			err := pool.QueryRow(ctx, "SELECT type, host, port, username, password FROM upstreams WHERE id = $1 AND enabled = TRUE", *l.UpstreamID).Scan(&u.Type, &u.Host, &u.Port, &u.Username, &u.Password)
 			if err == nil {
-				prefix := "http+"
+				prefix := "http"
 				if u.Type == "socks5" {
 					prefix = "socks5+"
 				}
 				auth := ""
 				if u.Username != "" {
-					auth = fmt.Sprintf("%s:%s@", u.Username, u.Password)
+					auth = fmt.Sprintf(" %s %s", u.Username, u.Password)
 				}
-				sb.WriteString(fmt.Sprintf("parent 1000 %s %s%s:%d\n", prefix, auth, u.Host, u.Port))
+				sb.WriteString(fmt.Sprintf("parent 1000 %s %s %d%s\n", prefix, u.Host, u.Port, auth))
 			}
 		} else if l.UpstreamGroupID != nil {
 			grows, err := pool.Query(ctx, "SELECT u.type, u.host, u.port, u.username, u.password FROM upstreams u JOIN upstream_group_members m ON u.id = m.upstream_id JOIN upstream_groups g ON g.id = m.group_id WHERE g.id = $1 AND g.enabled = TRUE AND u.enabled = TRUE", *l.UpstreamGroupID)
@@ -123,15 +123,15 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 				for grows.Next() {
 					var u models.Upstream
 					if err := grows.Scan(&u.Type, &u.Host, &u.Port, &u.Username, &u.Password); err == nil {
-						prefix := "http+"
+						prefix := "http"
 						if u.Type == "socks5" {
 							prefix = "socks5+"
 						}
 						auth := ""
 						if u.Username != "" {
-							auth = fmt.Sprintf("%s:%s@", u.Username, u.Password)
+							auth = fmt.Sprintf(" %s %s", u.Username, u.Password)
 						}
-						sb.WriteString(fmt.Sprintf("parent 1000 %s %s%s:%d\n", prefix, auth, u.Host, u.Port))
+						sb.WriteString(fmt.Sprintf("parent 1000 %s %s %d%s\n", prefix, u.Host, u.Port, auth))
 					}
 				}
 				grows.Close()
