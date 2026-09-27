@@ -33,16 +33,16 @@ func randString(alphabet string, n int) string {
 // UserCreds is what the bot shows the customer after purchase: everything
 // needed to connect plus the expiry the tariff bought.
 type UserCreds struct {
-	ID               int       `json:"id"`
-	Username         string    `json:"username"`
-	Password         string    `json:"password"`
-	Host             string    `json:"host"`
-	Port             int       `json:"port"`
-	Protocol         string    `json:"protocol"`
-	ListenerID       int       `json:"listener_id"`
+	ID               int        `json:"id"`
+	Username         string     `json:"username"`
+	Password         string     `json:"password"`
+	Host             string     `json:"host"`
+	Port             int        `json:"port"`
+	Protocol         string     `json:"protocol"`
+	ListenerID       int        `json:"listener_id"`
 	ExpiresAt        *time.Time `json:"expires_at"`
-	Enabled          bool      `json:"enabled"`
-	ConnectionString string    `json:"connection_string"`
+	Enabled          bool       `json:"enabled"`
+	ConnectionString string     `json:"connection_string"`
 }
 
 type userRow struct {
@@ -252,8 +252,8 @@ func (s *Server) extendUser(w http.ResponseWriter, r *http.Request) {
 }
 
 type rotateReq struct {
-	Password   *bool `json:"password"`     // rotate credentials (default true)
-	ListenerID *int  `json:"listener_id"`  // move to another exit/port (optional)
+	Password   *bool `json:"password"`    // rotate credentials (default true)
+	ListenerID *int  `json:"listener_id"` // move to another exit/port (optional)
 }
 
 func (s *Server) rotateUser(w http.ResponseWriter, r *http.Request) {

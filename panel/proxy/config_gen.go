@@ -7,10 +7,11 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"panel/config"
 	"panel/models"
 )
 
-func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (string, error) {
+func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config) (string, error) {
 	var sb strings.Builder
 
 	sb.WriteString("# Global\n")
@@ -18,7 +19,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 	sb.WriteString("nserver 8.8.4.4\n")
 	sb.WriteString("nscache 65536\n")
 	sb.WriteString("timeouts 1 5 30 60 180 1800 15 60\n")
-	sb.WriteString(fmt.Sprintf("log %s D\n", logPath))
+	sb.WriteString(fmt.Sprintf("log %s D\n", cfg.ProxyLogPath))
 	sb.WriteString("logformat \"- +_L%t.%. %N.%p %E %U %C:%c %R:%r %O %I %h %T\"\n")
 	sb.WriteString("rotate 30\n")
 	sb.WriteString("maxconn 100\n\n")
@@ -47,6 +48,25 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 	}
 	sb.WriteString("\n")
 
+	// Health failover (auto mode only): upstreams the checker marked DOWN.
+	// They are excluded from active routing: group members drop to weight 0
+	// (3proxy-native fallback — still reachable if everything else dies, but
+	// never selected while a healthy parent exists). In monitor mode the
+	// health table intentionally has zero effect on the generated config.
+	downUpstreams := map[int]bool{}
+	if cfg.HealthcheckMode == "auto" {
+		hrows, err := pool.Query(ctx, "SELECT upstream_id FROM upstream_health WHERE status = 'down'")
+		if err == nil {
+			for hrows.Next() {
+				var id int
+				if err := hrows.Scan(&id); err == nil {
+					downUpstreams[id] = true
+				}
+			}
+			hrows.Close()
+		}
+	}
+
 	// Listeners
 	lrows, err := pool.Query(ctx, "SELECT id, name, protocol, port, bind_ip, upstream_id, upstream_group_id FROM listeners WHERE enabled = TRUE")
 	if err != nil {
@@ -72,7 +92,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 		if err != nil {
 			return "", err
 		}
-		
+
 		var listenerUsers []string
 		var bands []string
 		for urow.Next() {
@@ -105,7 +125,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 				sb.WriteString(parentLine(1000, u) + "\n")
 			}
 		} else if l.UpstreamGroupID != nil {
-			grows, err := pool.Query(ctx, "SELECT u.type, u.host, u.port, u.username, u.password, m.weight FROM upstreams u JOIN upstream_group_members m ON u.id = m.upstream_id JOIN upstream_groups g ON g.id = m.group_id WHERE g.id = $1 AND g.enabled = TRUE AND u.enabled = TRUE ORDER BY m.id", *l.UpstreamGroupID)
+			grows, err := pool.Query(ctx, "SELECT u.id, u.type, u.host, u.port, u.username, u.password, m.weight FROM upstreams u JOIN upstream_group_members m ON u.id = m.upstream_id JOIN upstream_groups g ON g.id = m.group_id WHERE g.id = $1 AND g.enabled = TRUE AND u.enabled = TRUE ORDER BY m.id", *l.UpstreamGroupID)
 			if err == nil {
 				type member struct {
 					up models.Upstream
@@ -114,7 +134,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 				var members []member
 				for grows.Next() {
 					var m member
-					if err := grows.Scan(&m.up.Type, &m.up.Host, &m.up.Port, &m.up.Username, &m.up.Password, &m.w); err == nil {
+					if err := grows.Scan(&m.up.ID, &m.up.Type, &m.up.Host, &m.up.Port, &m.up.Username, &m.up.Password, &m.w); err == nil {
 						if m.w < 0 {
 							m.w = 0
 						}
@@ -144,17 +164,42 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 					total = len(members)
 					actives = len(members)
 				}
+
+				// Health failover: DOWN actives leave the balancing group
+				// (renormalize the survivors to 1000 among themselves, the
+				// dead ones become weight-0 fallbacks). When NO active member
+				// is healthy there is nothing to fall over to — keep the
+				// original weights as best effort.
+				liveActives := 0
+				for _, m := range members {
+					if m.w > 0 && !downUpstreams[m.up.ID] {
+						liveActives++
+					}
+				}
+				skip := actives > 0 && liveActives == 0 // keep best effort
+				countSet := actives
+				if !skip && liveActives < actives {
+					total = 0
+					countSet = 0
+					for _, m := range members {
+						if m.w > 0 && !downUpstreams[m.up.ID] {
+							total += m.w
+							countSet++
+						}
+					}
+				}
+
 				emitted := 0
 				emittedSum := 0
 				for _, m := range members {
-					if m.w <= 0 {
+					if m.w <= 0 || (downUpstreams[m.up.ID] && !skip) {
 						sb.WriteString(parentLine(0, m.up) + "\n")
 						continue
 					}
 					emitted++
 					var w int
-					if emitted == actives {
-						w = 1000 - emittedSum // last active member absorbs the rounding remainder
+					if emitted == countSet {
+						w = 1000 - emittedSum // last counted member absorbs the rounding remainder
 					} else {
 						w = 1000 * m.w / total
 						emittedSum += w

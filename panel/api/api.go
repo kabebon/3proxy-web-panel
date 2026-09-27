@@ -111,7 +111,7 @@ func (s *Server) requireToken(next http.Handler) http.Handler {
 func (s *Server) applyNow(ctx context.Context) error {
 	s.applyMu.Lock()
 	defer s.applyMu.Unlock()
-	content, err := proxy.GenerateConfig(ctx, s.pool, s.cfg.ProxyLogPath)
+	content, err := proxy.GenerateConfig(ctx, s.pool, s.cfg)
 	if err != nil {
 		return err
 	}
@@ -141,11 +141,12 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	s.pool.QueryRow(r.Context(), "SELECT COUNT(*) FROM listeners WHERE enabled").Scan(&listeners)
 	s.pool.QueryRow(r.Context(), "SELECT COUNT(*) FROM upstreams WHERE enabled").Scan(&upstreams)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":        "ok",
-		"proxy_running": proxy.IsProxyRunning(s.cfg.ProxyContainerName),
-		"users_active":  users,
-		"listeners":     listeners,
-		"upstreams":     upstreams,
+		"status":           "ok",
+		"proxy_running":    proxy.IsProxyRunning(s.cfg.ProxyContainerName),
+		"users_active":     users,
+		"listeners":        listeners,
+		"upstreams":        upstreams,
+		"healthcheck_mode": s.cfg.HealthcheckMode,
 	})
 }
 

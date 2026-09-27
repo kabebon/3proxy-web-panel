@@ -37,7 +37,7 @@ func RegisterDashboard(r chi.Router, pool *pgxpool.Pool, cfg *config.Config) {
 	})
 
 	r.Post("/proxy/apply", func(w http.ResponseWriter, r *http.Request) {
-		cfgContent, err := proxy.GenerateConfig(r.Context(), pool, cfg.ProxyLogPath)
+		cfgContent, err := proxy.GenerateConfig(r.Context(), pool, cfg)
 		if err != nil {
 			triggerToast(w, "Config generation failed: "+err.Error(), "error")
 			w.WriteHeader(500)

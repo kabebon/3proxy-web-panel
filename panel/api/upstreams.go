@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -16,7 +17,17 @@ type upstreamJSON struct {
 	Username  string `json:"username"`
 	Enabled   bool   `json:"enabled"`
 	HasSecret bool   `json:"has_password"`
+
+	// Health-checker state (nulls = never checked / checker in "off" mode)
+	HealthStatus  *string    `json:"health_status"` // "up" | "down"
+	LastCheckedAt *time.Time `json:"last_checked_at"`
+	LastError     string     `json:"last_error"`
 }
+
+// upstreamCols is the canonical upstream SELECT incl. health join.
+const upstreamCols = `u.id, u.name, u.type, u.host, u.port, u.username, u.password <> '' AS has_secret, u.enabled,
+	h.status, h.last_checked_at, COALESCE(h.last_error, '')
+	FROM upstreams u LEFT JOIN upstream_health h ON h.upstream_id = u.id`
 
 type upstreamReq struct {
 	Name     *string `json:"name"`
@@ -32,7 +43,7 @@ func validUpstreamType(t string) bool { return t == "http" || t == "socks5" }
 
 func (s *Server) listUpstreams(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.pool.Query(r.Context(),
-		`SELECT id, name, type, host, port, username, password <> '' AS has_secret, enabled FROM upstreams ORDER BY id`)
+		"SELECT "+upstreamCols+" ORDER BY u.id")
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -41,10 +52,10 @@ func (s *Server) listUpstreams(w http.ResponseWriter, r *http.Request) {
 	out := []upstreamJSON{}
 	for rows.Next() {
 		var u upstreamJSON
-		if err := rows.Scan(&u.ID, &u.Name, &u.Type, &u.Host, &u.Port, &u.Username, &u.HasSecret, &u.Enabled); err != nil {
-			continue
+		if err := rows.Scan(&u.ID, &u.Name, &u.Type, &u.Host, &u.Port, &u.Username, &u.HasSecret, &u.Enabled,
+			&u.HealthStatus, &u.LastCheckedAt, &u.LastError); err == nil {
+			out = append(out, u)
 		}
-		out = append(out, u)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -57,8 +68,9 @@ func (s *Server) getUpstream(w http.ResponseWriter, r *http.Request) {
 	}
 	var u upstreamJSON
 	err = s.pool.QueryRow(r.Context(),
-		`SELECT id, name, type, host, port, username, password <> '' AS has_secret, enabled FROM upstreams WHERE id=$1`, id).
-		Scan(&u.ID, &u.Name, &u.Type, &u.Host, &u.Port, &u.Username, &u.HasSecret, &u.Enabled)
+		"SELECT "+upstreamCols+" WHERE u.id=$1", id).
+		Scan(&u.ID, &u.Name, &u.Type, &u.Host, &u.Port, &u.Username, &u.HasSecret, &u.Enabled,
+			&u.HealthStatus, &u.LastCheckedAt, &u.LastError)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, "upstream not found")
 		return
@@ -116,8 +128,9 @@ func (s *Server) createUpstream(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getUpstreamByID(w http.ResponseWriter, r *http.Request, id int) {
 	var u upstreamJSON
 	err := s.pool.QueryRow(r.Context(),
-		`SELECT id, name, type, host, port, username, password <> '' AS has_secret, enabled FROM upstreams WHERE id=$1`, id).
-		Scan(&u.ID, &u.Name, &u.Type, &u.Host, &u.Port, &u.Username, &u.HasSecret, &u.Enabled)
+		"SELECT "+upstreamCols+" WHERE u.id=$1", id).
+		Scan(&u.ID, &u.Name, &u.Type, &u.Host, &u.Port, &u.Username, &u.HasSecret, &u.Enabled,
+			&u.HealthStatus, &u.LastCheckedAt, &u.LastError)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return

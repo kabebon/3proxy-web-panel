@@ -63,6 +63,7 @@ func main() {
 	apiServer := api.New(pool, cfg)
 	apiServer.Mount(r)
 	apiServer.StartReaper()
+	apiServer.StartHealthChecker()
 
 	log.Printf("🚀 3proxy Panel starting on :%s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {

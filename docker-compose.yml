@@ -36,6 +36,13 @@ services:
       API_TOKENS: "${API_TOKENS:-}"
       PUBLIC_HOST: "${PUBLIC_HOST:-}"
       REAPER_SECONDS: "${REAPER_SECONDS:-30}"
+      HEALTHCHECK_MODE: "${HEALTHCHECK_MODE:-auto}"
+      HEALTHCHECK_SECONDS: "${HEALTHCHECK_SECONDS:-30}"
+      HEALTHCHECK_TIMEOUT: "${HEALTHCHECK_TIMEOUT:-10}"
+      HEALTHCHECK_FAILS: "${HEALTHCHECK_FAILS:-1}"
+      HEALTHCHECK_TARGETS: "${HEALTHCHECK_TARGETS:-api.openai.com:443,api.x.ai:443}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
     ports:
       # Loopback by default: the admin panel must not face the internet.
       # Set PANEL_BIND=0.0.0.0 in .env only behind a firewall/reverse proxy.

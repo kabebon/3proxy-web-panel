@@ -12,6 +12,9 @@ import (
 //go:embed migrations/001_init.sql
 var initSQL string
 
+//go:embed migrations/002_upstream_health.sql
+var upstreamHealthSQL string
+
 func InitDB(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.New(ctx, cfg.DBUrl)
 	if err != nil {
@@ -21,7 +24,10 @@ func InitDB(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
 }
 
 func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
-	_, err := pool.Exec(ctx, initSQL)
+	if _, err := pool.Exec(ctx, initSQL); err != nil {
+		return err
+	}
+	_, err := pool.Exec(ctx, upstreamHealthSQL)
 	return err
 }
 
