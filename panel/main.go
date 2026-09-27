@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+	"panel/api"
 	"panel/config"
 	"panel/db"
 	"panel/handlers"
@@ -57,6 +58,11 @@ func main() {
 		r.Mount("/listeners", handlers.ListenersHandlers(pool))
 		r.Mount("/stats", handlers.StatsHandlers(pool, cfg))
 	})
+
+	// REST API for the bot (Bearer token; 404 when no tokens configured)
+	apiServer := api.New(pool, cfg)
+	apiServer.Mount(r)
+	apiServer.StartReaper()
 
 	log.Printf("🚀 3proxy Panel starting on :%s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {

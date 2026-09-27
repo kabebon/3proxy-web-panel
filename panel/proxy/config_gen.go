@@ -2,8 +2,6 @@ package proxy
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"strings"
@@ -25,8 +23,8 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 	sb.WriteString("rotate 30\n")
 	sb.WriteString("maxconn 100\n\n")
 
-	// Users definition
-	rows, err := pool.Query(ctx, "SELECT username, password FROM proxy_users WHERE enabled = TRUE")
+	// Users definition — expired subscriptions never reach the config
+	rows, err := pool.Query(ctx, "SELECT username, password FROM proxy_users WHERE enabled = TRUE AND (expires_at IS NULL OR expires_at > NOW())")
 	if err != nil {
 		return "", err
 	}
@@ -39,9 +37,10 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 		if err := rows.Scan(&u, &p); err != nil {
 			return "", err
 		}
-		hash := md5.Sum([]byte(p))
-		hashHex := hex.EncodeToString(hash[:])
-		usersStr = append(usersStr, fmt.Sprintf("%s:CR1:%s", u, hashHex))
+		// CL (cleartext): 3proxy 0.9.6 rejects the unsalted-md5 CR1 form this
+		// panel used to emit — every login came back 407. Passwords are already
+		// plaintext in the DB; harden (NT hash) separately later.
+		usersStr = append(usersStr, fmt.Sprintf("%s:CL:%s", u, p))
 	}
 	if len(usersStr) > 0 {
 		sb.WriteString("users " + strings.Join(usersStr, " ") + "\n")
@@ -66,7 +65,10 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 
 	for _, l := range listeners {
 		sb.WriteString(fmt.Sprintf("# Listener %s\n", l.Name))
-		urow, err := pool.Query(ctx, "SELECT username, bandwidth_in, bandwidth_out FROM proxy_users WHERE enabled = TRUE AND listener_id = $1", l.ID)
+		sb.WriteString("auth strong\n")
+		sb.WriteString("flush\n")
+
+		urow, err := pool.Query(ctx, "SELECT username, bandwidth_in, bandwidth_out FROM proxy_users WHERE enabled = TRUE AND (expires_at IS NULL OR expires_at > NOW()) AND listener_id = $1", l.ID)
 		if err != nil {
 			return "", err
 		}
@@ -87,55 +89,85 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 		}
 		urow.Close()
 
+		// ONE allow entry with the full user list: a 3proxy parent group binds
+		// to the LAST ACL entry, so separate "allow user" lines would leave
+		// everyone but the last-listed user bypassing the chain (direct exit).
 		if len(listenerUsers) > 0 {
-			sb.WriteString("auth strong\n")
-			sb.WriteString("flush\n")
-			for _, u := range listenerUsers {
-				sb.WriteString(fmt.Sprintf("allow %s\n", u))
-			}
-			for _, b := range bands {
-				sb.WriteString(b + "\n")
-			}
-			sb.WriteString("deny *\n")
-		} else {
-			sb.WriteString("auth none\n")
-			sb.WriteString("flush\n")
-			sb.WriteString("allow *\n")
+			sb.WriteString("allow " + strings.Join(listenerUsers, ",") + "\n")
 		}
 
+		// Parents must come directly after the allow rules: 3proxy attaches the
+		// chain to the last "allow" ACL entry ("deny" in between is a chaining error).
 		if l.UpstreamID != nil {
 			var u models.Upstream
 			err := pool.QueryRow(ctx, "SELECT type, host, port, username, password FROM upstreams WHERE id = $1 AND enabled = TRUE", *l.UpstreamID).Scan(&u.Type, &u.Host, &u.Port, &u.Username, &u.Password)
 			if err == nil {
-				prefix := "http"
-				if u.Type == "socks5" {
-					prefix = "socks5"
-				}
-				auth := ""
-				if u.Username != "" {
-					auth = fmt.Sprintf(" %s %s", u.Username, u.Password)
-				}
-				sb.WriteString(fmt.Sprintf("parent 1000 %s %s %d%s\n", prefix, u.Host, u.Port, auth))
+				sb.WriteString(parentLine(1000, u) + "\n")
 			}
 		} else if l.UpstreamGroupID != nil {
-			grows, err := pool.Query(ctx, "SELECT u.type, u.host, u.port, u.username, u.password FROM upstreams u JOIN upstream_group_members m ON u.id = m.upstream_id JOIN upstream_groups g ON g.id = m.group_id WHERE g.id = $1 AND g.enabled = TRUE AND u.enabled = TRUE", *l.UpstreamGroupID)
+			grows, err := pool.Query(ctx, "SELECT u.type, u.host, u.port, u.username, u.password, m.weight FROM upstreams u JOIN upstream_group_members m ON u.id = m.upstream_id JOIN upstream_groups g ON g.id = m.group_id WHERE g.id = $1 AND g.enabled = TRUE AND u.enabled = TRUE ORDER BY m.id", *l.UpstreamGroupID)
 			if err == nil {
+				type member struct {
+					up models.Upstream
+					w  int
+				}
+				var members []member
 				for grows.Next() {
-					var u models.Upstream
-					if err := grows.Scan(&u.Type, &u.Host, &u.Port, &u.Username, &u.Password); err == nil {
-						prefix := "http"
-						if u.Type == "socks5" {
-							prefix = "socks5"
+					var m member
+					if err := grows.Scan(&m.up.Type, &m.up.Host, &m.up.Port, &m.up.Username, &m.up.Password, &m.w); err == nil {
+						if m.w < 0 {
+							m.w = 0
 						}
-						auth := ""
-						if u.Username != "" {
-							auth = fmt.Sprintf(" %s %s", u.Username, u.Password)
-						}
-						sb.WriteString(fmt.Sprintf("parent 1000 %s %s %d%s\n", prefix, u.Host, u.Port, auth))
+						members = append(members, m)
 					}
 				}
 				grows.Close()
+
+				// 3proxy groups parents by cumulative weight, a group ending
+				// at exactly 1000. Normalize member weights to sum to 1000 so
+				// the whole set forms ONE balancing group. Weight-0 members are
+				// emitted as 0 = 3proxy-native fallback (used only when the
+				// others fail) — the hook for health-check auto mode.
+				var total int
+				var actives int
+				for _, m := range members {
+					if m.w > 0 {
+						total += m.w
+						actives++
+					}
+				}
+				if total == 0 && len(members) > 0 {
+					// all members fallback/zero: degrade to equal split
+					for i := range members {
+						members[i].w = 1
+					}
+					total = len(members)
+					actives = len(members)
+				}
+				emitted := 0
+				emittedSum := 0
+				for _, m := range members {
+					if m.w <= 0 {
+						sb.WriteString(parentLine(0, m.up) + "\n")
+						continue
+					}
+					emitted++
+					var w int
+					if emitted == actives {
+						w = 1000 - emittedSum // last active member absorbs the rounding remainder
+					} else {
+						w = 1000 * m.w / total
+						emittedSum += w
+					}
+					sb.WriteString(parentLine(w, m.up) + "\n")
+				}
 			}
+		}
+
+		sb.WriteString("deny *\n")
+
+		for _, b := range bands {
+			sb.WriteString(b + "\n")
 		}
 
 		if l.Protocol == "http" {
@@ -147,6 +179,21 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 	}
 
 	return sb.String(), nil
+}
+
+// parentLine renders a 3proxy parent directive in the positional form understood
+// by 3proxy 0.9.6 (alpine): parent <weight> <type> <host> <port> [user pass].
+// The URL form "user:pass@host:port" is NOT parsed by this build.
+func parentLine(weight int, u models.Upstream) string {
+	ptype := "http"
+	if u.Type == "socks5" {
+		ptype = "socks5+"
+	}
+	line := fmt.Sprintf("parent %d %s %s %d", weight, ptype, u.Host, u.Port)
+	if u.Username != "" {
+		line += fmt.Sprintf(" %s %s", u.Username, u.Password)
+	}
+	return line
 }
 
 func WriteConfig(configPath string, content string) error {

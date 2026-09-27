@@ -12,3 +12,8 @@ panel/panel.exe
 .idea/
 .vscode/
 *.log
+
+# Internal ops docs & stand scripts — NOT for the public repo
+# (contain VPS addresses and business planning; keep local-only)
+PLAN.md
+deploy/

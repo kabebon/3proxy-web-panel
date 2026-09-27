@@ -1,6 +1,10 @@
 package config
 
-import "os"
+import (
+	"os"
+	"strconv"
+	"strings"
+)
 
 type Config struct {
 	DBUrl              string
@@ -11,6 +15,9 @@ type Config struct {
 	ProxyContainerName string
 	ProxyConfigPath    string
 	ProxyLogPath       string
+	APITokens          []string
+	PublicHost         string
+	ReaperSeconds      int
 }
 
 func Load() *Config {
@@ -23,6 +30,17 @@ func Load() *Config {
 		ProxyContainerName: os.Getenv("PROXY_CONTAINER_NAME"),
 		ProxyConfigPath:    os.Getenv("PROXY_CONFIG_PATH"),
 		ProxyLogPath:       os.Getenv("PROXY_LOG_PATH"),
+		PublicHost:         os.Getenv("PUBLIC_HOST"),
+		ReaperSeconds:      30,
+	}
+
+	for _, t := range strings.Split(os.Getenv("API_TOKENS"), ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			c.APITokens = append(c.APITokens, t)
+		}
+	}
+	if n, err := strconv.Atoi(os.Getenv("REAPER_SECONDS")); err == nil && n > 0 {
+		c.ReaperSeconds = n
 	}
 
 	if c.AdminUser == "" {
