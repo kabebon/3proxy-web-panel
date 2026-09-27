@@ -85,6 +85,45 @@ func (s *Server) healthRound() {
 	for _, res := range results {
 		s.processCheck(ctx, res)
 	}
+
+	// Auto mode safety net: a DOWN transition may happen while no healthy
+	// replacement exists yet (see failoverUpstream) — when one is added later,
+	// re-point the still-stranded listeners on the next round.
+	if s.cfg.HealthcheckMode == "auto" && s.sweepStaleBindings(ctx) {
+		if err := s.applyNow(ctx); err != nil {
+			log.Printf("[health] apply after binding sweep failed: %v", err)
+		}
+	}
+}
+
+// sweepStaleBindings moves enabled listeners still bound to a DOWN upstream
+// to a healthy replacement. Returns true when anything moved (config needs
+// to be re-applied).
+func (s *Server) sweepStaleBindings(ctx context.Context) bool {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT l.upstream_id FROM listeners l
+		JOIN upstream_health h ON h.upstream_id = l.upstream_id AND h.status = 'down'
+		WHERE l.enabled AND l.upstream_id IS NOT NULL`)
+	if err != nil {
+		return false
+	}
+	var dead []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err == nil {
+			dead = append(dead, id)
+		}
+	}
+	rows.Close()
+
+	movedAny := false
+	for _, id := range dead {
+		if moved := s.failoverUpstream(ctx, id); moved != "" {
+			log.Printf("[health] failover sweep: upstream#%d down, moved %s", id, moved)
+			movedAny = true
+		}
+	}
+	return movedAny
 }
 
 // probeUpstream runs the AI-reachability probe through the upstream itself.
