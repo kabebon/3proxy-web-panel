@@ -109,7 +109,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 			if err == nil {
 				prefix := "http"
 				if u.Type == "socks5" {
-					prefix = "socks5+"
+					prefix = "socks5"
 				}
 				auth := ""
 				if u.Username != "" {
@@ -125,7 +125,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 					if err := grows.Scan(&u.Type, &u.Host, &u.Port, &u.Username, &u.Password); err == nil {
 						prefix := "http"
 						if u.Type == "socks5" {
-							prefix = "socks5+"
+							prefix = "socks5"
 						}
 						auth := ""
 						if u.Username != "" {
