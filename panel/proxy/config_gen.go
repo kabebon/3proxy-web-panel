@@ -66,9 +66,6 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 
 	for _, l := range listeners {
 		sb.WriteString(fmt.Sprintf("# Listener %s\n", l.Name))
-		sb.WriteString("auth strong\n")
-		sb.WriteString("flush\n")
-
 		urow, err := pool.Query(ctx, "SELECT username, bandwidth_in, bandwidth_out FROM proxy_users WHERE enabled = TRUE AND listener_id = $1", l.ID)
 		if err != nil {
 			return "", err
@@ -90,13 +87,21 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, logPath string) (st
 		}
 		urow.Close()
 
-		for _, u := range listenerUsers {
-			sb.WriteString(fmt.Sprintf("allow %s\n", u))
+		if len(listenerUsers) > 0 {
+			sb.WriteString("auth strong\n")
+			sb.WriteString("flush\n")
+			for _, u := range listenerUsers {
+				sb.WriteString(fmt.Sprintf("allow %s\n", u))
+			}
+			for _, b := range bands {
+				sb.WriteString(b + "\n")
+			}
+			sb.WriteString("deny *\n")
+		} else {
+			sb.WriteString("auth none\n")
+			sb.WriteString("flush\n")
+			sb.WriteString("allow *\n")
 		}
-		for _, b := range bands {
-			sb.WriteString(b + "\n")
-		}
-		sb.WriteString("deny *\n")
 
 		if l.UpstreamID != nil {
 			var u models.Upstream
