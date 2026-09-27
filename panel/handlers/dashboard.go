@@ -12,6 +12,11 @@ import (
 
 func RegisterDashboard(r chi.Router, pool *pgxpool.Pool, cfg *config.Config) {
 
+	// Redirect /dashboard → / so nav link works
+	r.Get("/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/", http.StatusFound)
+	})
+
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		var userCount, upstreamCount, listenerCount, groupCount int
 		pool.QueryRow(r.Context(), "SELECT COUNT(*) FROM proxy_users").Scan(&userCount)
