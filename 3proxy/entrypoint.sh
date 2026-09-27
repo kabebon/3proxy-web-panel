@@ -20,4 +20,7 @@ PROXY_PID=$!
 echo $PROXY_PID > "$PID"
 
 # Wait for the background process
-wait $PROXY_PID
+# 'wait' returns immediately if a trapped signal is received, so we must loop
+while kill -0 $PROXY_PID 2>/dev/null; do
+    wait $PROXY_PID || true
+done
