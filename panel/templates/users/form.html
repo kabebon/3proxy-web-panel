@@ -56,9 +56,15 @@
                 <input type="text" name="allowed_ips" value="{{if .User}}{{.User.AllowedIPs}}{{end}}" placeholder="empty = any" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
 
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-1">Expires At</label>
-                <input type="datetime-local" name="expires_at" value="{{if .User}}{{if .User.ExpiresAt}}{{.User.ExpiresAt.Format "2006-01-02T15:04"}}{{end}}{{end}}" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Traffic Limit (MB)</label>
+                    <input type="number" min="0" name="traffic_limit" value="{{if .User}}{{div .User.TrafficLimit 1048576}}{{else}}0{{end}}" placeholder="0 = unlimited" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Expires At</label>
+                    <input type="datetime-local" name="expires_at" value="{{if .User}}{{if .User.ExpiresAt}}{{.User.ExpiresAt.Format "2006-01-02T15:04"}}{{end}}{{end}}" class="w-full bg-slate-900 border border-slate-700 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
             </div>
             
             <div class="flex items-end pb-2">

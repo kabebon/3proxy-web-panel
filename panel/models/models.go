@@ -68,6 +68,8 @@ type ProxyUser struct {
 	BandwidthOut int // KB/s, 0=unlimited
 	AllowedIPs   string
 	Enabled      bool
+	TrafficLimit int64 // bytes, 0=unlimited
+	TrafficUsed  int64 // bytes
 	ExpiresAt    *time.Time
 	CreatedAt    time.Time
 }

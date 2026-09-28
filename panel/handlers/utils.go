@@ -18,7 +18,7 @@ func InitTemplates(dir string) error {
 		return err
 	}
 	// Parse sub-directories
-	for _, sub := range []string{"users", "upstreams", "groups", "listeners", "stats", "partials"} {
+	for _, sub := range []string{"users", "upstreams", "groups", "listeners", "stats", "partials", "client"} {
 		subPattern := filepath.Join(dir, sub, "*.html")
 		matches, _ := filepath.Glob(subPattern)
 		if len(matches) > 0 {
@@ -39,6 +39,15 @@ func templateFuncs() template.FuncMap {
 				return 0
 			}
 			return *p
+		},
+		"div": func(a, b int64) int64 {
+			if b == 0 {
+				return 0
+			}
+			return a / b
+		},
+		"mul": func(a, b int64) int64 {
+			return a * b
 		},
 	}
 }

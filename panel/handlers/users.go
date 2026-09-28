@@ -49,12 +49,15 @@ func UsersHandlers(pool *pgxpool.Pool) http.Handler {
 		bout, _ := strconv.Atoi(r.FormValue("bandwidth_out"))
 		enabled := r.FormValue("enabled") == "on"
 		allowedIPs := r.FormValue("allowed_ips")
+		
+		trafficLimitMB, _ := strconv.ParseInt(r.FormValue("traffic_limit"), 10, 64)
+		trafficLimit := trafficLimitMB * 1024 * 1024 // convert MB to bytes
 
 		var uid int
 		err := pool.QueryRow(r.Context(),
-			`INSERT INTO proxy_users (username, password, listener_id, bandwidth_in, bandwidth_out, allowed_ips, enabled)
-             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-			username, password, listenerID, bin, bout, allowedIPs, enabled,
+			`INSERT INTO proxy_users (username, password, listener_id, bandwidth_in, bandwidth_out, allowed_ips, enabled, traffic_limit)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+			username, password, listenerID, bin, bout, allowedIPs, enabled, trafficLimit,
 		).Scan(&uid)
 		if err != nil {
 			triggerToast(w, "Error: "+err.Error(), "error")
@@ -96,6 +99,9 @@ func UsersHandlers(pool *pgxpool.Pool) http.Handler {
 		bin, _ := strconv.Atoi(r.FormValue("bandwidth_in"))
 		bout, _ := strconv.Atoi(r.FormValue("bandwidth_out"))
 		enabled := r.FormValue("enabled") == "on"
+		
+		trafficLimitMB, _ := strconv.ParseInt(r.FormValue("traffic_limit"), 10, 64)
+		trafficLimit := trafficLimitMB * 1024 * 1024
 
 		// Update password only if provided
 		pass := r.FormValue("password")
@@ -103,13 +109,13 @@ func UsersHandlers(pool *pgxpool.Pool) http.Handler {
 		if pass != "" {
 			_, err = pool.Exec(r.Context(),
 				`UPDATE proxy_users SET username=$1, password=$2, listener_id=$3,
-                 bandwidth_in=$4, bandwidth_out=$5, allowed_ips=$6, enabled=$7 WHERE id=$8`,
-				r.FormValue("username"), pass, listenerID, bin, bout, r.FormValue("allowed_ips"), enabled, id)
+                 bandwidth_in=$4, bandwidth_out=$5, allowed_ips=$6, enabled=$7, traffic_limit=$8 WHERE id=$9`,
+				r.FormValue("username"), pass, listenerID, bin, bout, r.FormValue("allowed_ips"), enabled, trafficLimit, id)
 		} else {
 			_, err = pool.Exec(r.Context(),
 				`UPDATE proxy_users SET username=$1, listener_id=$2,
-                 bandwidth_in=$3, bandwidth_out=$4, allowed_ips=$5, enabled=$6 WHERE id=$7`,
-				r.FormValue("username"), listenerID, bin, bout, r.FormValue("allowed_ips"), enabled, id)
+                 bandwidth_in=$3, bandwidth_out=$4, allowed_ips=$5, enabled=$6, traffic_limit=$7 WHERE id=$8`,
+				r.FormValue("username"), listenerID, bin, bout, r.FormValue("allowed_ips"), enabled, trafficLimit, id)
 		}
 		if err != nil {
 			triggerToast(w, "Error: "+err.Error(), "error")
@@ -165,7 +171,7 @@ func UsersHandlers(pool *pgxpool.Pool) http.Handler {
 func loadUsers(r *http.Request, pool *pgxpool.Pool) ([]models.ProxyUser, error) {
 	rows, err := pool.Query(r.Context(),
 		`SELECT u.id, u.username, u.password, u.listener_id, u.bandwidth_in, u.bandwidth_out,
-                u.allowed_ips, u.enabled, u.expires_at
+                u.allowed_ips, u.enabled, u.traffic_limit, u.traffic_used, u.expires_at
          FROM proxy_users u ORDER BY u.id`)
 	if err != nil {
 		return nil, err
@@ -176,7 +182,7 @@ func loadUsers(r *http.Request, pool *pgxpool.Pool) ([]models.ProxyUser, error) 
 	for rows.Next() {
 		var u models.ProxyUser
 		if err := rows.Scan(&u.ID, &u.Username, &u.Password, &u.ListenerID,
-			&u.BandwidthIn, &u.BandwidthOut, &u.AllowedIPs, &u.Enabled, &u.ExpiresAt); err != nil {
+			&u.BandwidthIn, &u.BandwidthOut, &u.AllowedIPs, &u.Enabled, &u.TrafficLimit, &u.TrafficUsed, &u.ExpiresAt); err != nil {
 			return nil, err
 		}
 		users = append(users, u)
@@ -197,10 +203,10 @@ func loadUser(r *http.Request, pool *pgxpool.Pool, id int) (models.ProxyUser, er
 	var u models.ProxyUser
 	err := pool.QueryRow(r.Context(),
 		`SELECT id, username, password, listener_id, bandwidth_in, bandwidth_out,
-                allowed_ips, enabled, expires_at
+                allowed_ips, enabled, traffic_limit, traffic_used, expires_at
          FROM proxy_users WHERE id=$1`, id).
 		Scan(&u.ID, &u.Username, &u.Password, &u.ListenerID,
-			&u.BandwidthIn, &u.BandwidthOut, &u.AllowedIPs, &u.Enabled, &u.ExpiresAt)
+			&u.BandwidthIn, &u.BandwidthOut, &u.AllowedIPs, &u.Enabled, &u.TrafficLimit, &u.TrafficUsed, &u.ExpiresAt)
 	if err != nil {
 		return u, err
 	}

@@ -46,6 +46,7 @@ func main() {
 
 	// Auth routes (public)
 	handlers.RegisterAuth(r, pool)
+	handlers.RegisterClientPortal(r, pool)
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
@@ -64,6 +65,7 @@ func main() {
 	apiServer.Mount(r)
 	apiServer.StartReaper()
 	apiServer.StartHealthChecker()
+	apiServer.StartTrafficDaemon()
 
 	log.Printf("🚀 3proxy Panel starting on :%s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {

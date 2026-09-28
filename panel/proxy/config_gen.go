@@ -22,6 +22,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 	sb.WriteString(fmt.Sprintf("log %s D\n", cfg.ProxyLogPath))
 	sb.WriteString("logformat \"- +_L%t.%. %N.%p %E %U %C:%c %R:%r %O %I %h %T\"\n")
 	sb.WriteString("rotate 30\n")
+	sb.WriteString("counter /var/log/3proxy/3proxy.traf M\n")
 	sb.WriteString("maxconn 100\n\n")
 
 	// Users definition — expired subscriptions never reach the config
@@ -86,7 +87,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 	for _, l := range listeners {
 		sb.WriteString(fmt.Sprintf("# Listener %s\n", l.Name))
 
-		urow, err := pool.Query(ctx, "SELECT username, bandwidth_in, bandwidth_out FROM proxy_users WHERE enabled = TRUE AND (expires_at IS NULL OR expires_at > NOW()) AND listener_id = $1", l.ID)
+		urow, err := pool.Query(ctx, "SELECT id, username, bandwidth_in, bandwidth_out FROM proxy_users WHERE enabled = TRUE AND (expires_at IS NULL OR expires_at > NOW()) AND listener_id = $1", l.ID)
 		if err != nil {
 			return "", err
 		}
@@ -94,16 +95,22 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 		var listenerUsers []string
 		var bands []string
 		for urow.Next() {
+			var id int
 			var u string
 			var bin, bout int
-			if err := urow.Scan(&u, &bin, &bout); err != nil {
+			if err := urow.Scan(&id, &u, &bin, &bout); err != nil {
 				urow.Close()
 				return "", err
 			}
 			listenerUsers = append(listenerUsers, u)
-			if bin > 0 || bout > 0 {
-				bands = append(bands, fmt.Sprintf("bandlim %d %d %s", bin, bout, u))
+			if bin > 0 {
+				bands = append(bands, fmt.Sprintf("bandlimin %d %s", bin*1024, u))
 			}
+			if bout > 0 {
+				bands = append(bands, fmt.Sprintf("bandlimout %d %s", bout*1024, u))
+			}
+			bands = append(bands, fmt.Sprintf("countin %d %s", id, u))
+			bands = append(bands, fmt.Sprintf("countout %d %s", id, u))
 		}
 		urow.Close()
 
