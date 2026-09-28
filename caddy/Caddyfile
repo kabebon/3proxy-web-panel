@@ -1,0 +1,7 @@
+# Caddyfile for 3proxy Web Panel
+# Caddy automatically obtains and renews TLS certs via Let's Encrypt.
+# The domain is read from the DOMAIN env var (set in .env).
+
+{$DOMAIN} {
+    reverse_proxy panel:8080
+}
