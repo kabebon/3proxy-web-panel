@@ -18,6 +18,9 @@ var upstreamHealthSQL string
 //go:embed migrations/003_traffic_limits.sql
 var trafficLimitsSQL string
 
+//go:embed migrations/004_traffic_accounting.sql
+var trafficAccountingSQL string
+
 func InitDB(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.New(ctx, cfg.DBUrl)
 	if err != nil {
@@ -33,7 +36,10 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	if _, err := pool.Exec(ctx, upstreamHealthSQL); err != nil {
 		return err
 	}
-	_, err := pool.Exec(ctx, trafficLimitsSQL)
+	if _, err := pool.Exec(ctx, trafficLimitsSQL); err != nil {
+		return err
+	}
+	_, err := pool.Exec(ctx, trafficAccountingSQL)
 	return err
 }
 

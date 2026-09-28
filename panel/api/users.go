@@ -1,58 +1,46 @@
 package api
 
 import (
-	"crypto/rand"
-	"math/big"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"panel/gen"
 )
-
-// credential alphabet: no look-alike chars, no specials (CL config + URL safe)
-const (
-	usernameAlphabet = "abcdefghjkmnpqrstuvwxyz23456789"
-	passwordAlphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
-)
-
-func randString(alphabet string, n int) string {
-	b := make([]byte, n)
-	max := big.NewInt(int64(len(alphabet)))
-	for i := range b {
-		idx, err := rand.Int(rand.Reader, max)
-		if err != nil {
-			panic(err) // crypto/rand failure is unrecoverable
-		}
-		b[i] = alphabet[idx.Int64()]
-	}
-	return string(b)
-}
 
 // UserCreds is what the bot shows the customer after purchase: everything
-// needed to connect plus the expiry the tariff bought.
+// needed to connect plus the expiry the tariff bought and the traffic state.
 type UserCreds struct {
-	ID               int        `json:"id"`
-	Username         string     `json:"username"`
-	Password         string     `json:"password"`
-	Host             string     `json:"host"`
-	Port             int        `json:"port"`
-	Protocol         string     `json:"protocol"`
-	ListenerID       int        `json:"listener_id"`
-	ExpiresAt        *time.Time `json:"expires_at"`
-	Enabled          bool       `json:"enabled"`
-	ConnectionString string     `json:"connection_string"`
+	ID                    int        `json:"id"`
+	Username              string     `json:"username"`
+	Password              string     `json:"password"`
+	Host                  string     `json:"host"`
+	Port                  int        `json:"port"`
+	Protocol              string     `json:"protocol"`
+	ListenerID            int        `json:"listener_id"`
+	ExpiresAt             *time.Time `json:"expires_at"`
+	Enabled               bool       `json:"enabled"`
+	TrafficLimit          int64      `json:"traffic_limit_bytes"`      // 0 = unlimited
+	TrafficUsed           int64      `json:"traffic_used_bytes"`
+	TrafficRemainingBytes int64      `json:"traffic_remaining_bytes"` // -1 = unlimited
+	TrafficExhausted      bool       `json:"traffic_exhausted"`       // true = cut off by quota
+	ConnectionString      string     `json:"connection_string"`
 }
 
 type userRow struct {
-	ID         int
-	Username   string
-	Password   string
-	ListenerID *int
-	Enabled    bool
-	ExpiresAt  *time.Time
+	ID                int
+	Username          string
+	Password          string
+	ListenerID        *int
+	Enabled           bool
+	ExpiresAt         *time.Time
+	TrafficLimit     int64
+	TrafficUsed      int64
 }
+
+const userCols = "id, username, password, listener_id, enabled, expires_at, traffic_limit, traffic_used"
 
 func (s *Server) loadUserByID(w http.ResponseWriter, r *http.Request) (userRow, bool) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -62,8 +50,9 @@ func (s *Server) loadUserByID(w http.ResponseWriter, r *http.Request) (userRow, 
 	}
 	var u userRow
 	err = s.pool.QueryRow(r.Context(),
-		`SELECT id, username, password, listener_id, enabled, expires_at FROM proxy_users WHERE id=$1`, id).
-		Scan(&u.ID, &u.Username, &u.Password, &u.ListenerID, &u.Enabled, &u.ExpiresAt)
+		`SELECT `+userCols+` FROM proxy_users WHERE id=$1`, id).
+		Scan(&u.ID, &u.Username, &u.Password, &u.ListenerID, &u.Enabled, &u.ExpiresAt,
+			&u.TrafficLimit, &u.TrafficUsed)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, "user not found")
 		return userRow{}, false
@@ -77,6 +66,16 @@ func (s *Server) creds(r *http.Request, u userRow) (UserCreds, error) {
 		ID: u.ID, Username: u.Username, Password: u.Password,
 		ListenerID: 0, ExpiresAt: u.ExpiresAt, Enabled: u.Enabled,
 		Host: s.cfg.PublicHost,
+		TrafficLimit: u.TrafficLimit, TrafficUsed: u.TrafficUsed,
+	}
+	if u.TrafficLimit > 0 {
+		c.TrafficRemainingBytes = u.TrafficLimit - u.TrafficUsed
+		if c.TrafficRemainingBytes < 0 {
+			c.TrafficRemainingBytes = 0
+		}
+		c.TrafficExhausted = u.TrafficUsed >= u.TrafficLimit
+	} else {
+		c.TrafficRemainingBytes = -1
 	}
 	if u.ListenerID != nil {
 		c.ListenerID = *u.ListenerID
@@ -95,11 +94,15 @@ func (s *Server) creds(r *http.Request, u userRow) (UserCreds, error) {
 }
 
 type createUserReq struct {
-	Username   *string `json:"username"`
-	Password   *string `json:"password"`
-	ListenerID *int    `json:"listener_id"`
-	Days       *int    `json:"days"` // subscription length; default 30
+	Username       *string  `json:"username"`
+	Password       *string  `json:"password"`
+	ListenerID     *int     `json:"listener_id"`
+	Days           *int     `json:"days"`            // subscription length; default 30
+	TrafficLimitGB *float64 `json:"traffic_limit_gb"` // total quota; 0/null = unlimited
 }
+
+// gbToBytes converts gigabytes (as sold to customers) to bytes.
+func gbToBytes(gb float64) int64 { return int64(gb * 1073741824) }
 
 func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 	var req createUserReq
@@ -113,14 +116,14 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		username = *req.Username
 	}
 	if username == "" {
-		username = "p" + randString(usernameAlphabet, 8)
+		username = gen.Username()
 	}
 	password := ""
 	if req.Password != nil {
 		password = *req.Password
 	}
 	if password == "" {
-		password = randString(passwordAlphabet, 12)
+		password = gen.Password()
 	}
 	days := 30
 	if req.Days != nil {
@@ -129,6 +132,14 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 	if days < 0 || days > 3650 {
 		writeErr(w, http.StatusBadRequest, "days must be 0..3650")
 		return
+	}
+	var limitBytes int64
+	if req.TrafficLimitGB != nil {
+		if *req.TrafficLimitGB < 0 || *req.TrafficLimitGB > 1e6 {
+			writeErr(w, http.StatusBadRequest, "traffic_limit_gb must be 0..1000000")
+			return
+		}
+		limitBytes = gbToBytes(*req.TrafficLimitGB)
 	}
 
 	// listener: explicit or first enabled (rotating/sticky product choice is
@@ -160,9 +171,9 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 
 	var uid int
 	err := s.pool.QueryRow(r.Context(),
-		`INSERT INTO proxy_users (username, password, listener_id, expires_at, enabled)
-		 VALUES ($1,$2,$3,$4,TRUE) RETURNING id`,
-		username, password, listenerID, expires).Scan(&uid)
+		`INSERT INTO proxy_users (username, password, listener_id, expires_at, traffic_limit, enabled)
+		 VALUES ($1,$2,$3,$4,$5,TRUE) RETURNING id`,
+		username, password, listenerID, expires, limitBytes).Scan(&uid)
 	if err != nil {
 		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
 			writeErr(w, http.StatusConflict, "username already exists")
@@ -179,8 +190,9 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 
 	var u userRow
 	_ = s.pool.QueryRow(r.Context(),
-		`SELECT id, username, password, listener_id, enabled, expires_at FROM proxy_users WHERE id=$1`, uid).
-		Scan(&u.ID, &u.Username, &u.Password, &u.ListenerID, &u.Enabled, &u.ExpiresAt)
+		`SELECT `+userCols+` FROM proxy_users WHERE id=$1`, uid).
+		Scan(&u.ID, &u.Username, &u.Password, &u.ListenerID, &u.Enabled, &u.ExpiresAt,
+			&u.TrafficLimit, &u.TrafficUsed)
 	creds, _ := s.creds(r, u)
 	writeJSON(w, http.StatusCreated, creds)
 }
@@ -197,7 +209,7 @@ func (s *Server) getUser(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.pool.Query(r.Context(),
-		`SELECT id, username, password, listener_id, enabled, expires_at FROM proxy_users ORDER BY id`)
+		`SELECT `+userCols+` FROM proxy_users ORDER BY id`)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -207,7 +219,8 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	out := []UserCreds{}
 	for rows.Next() {
 		var u userRow
-		if err := rows.Scan(&u.ID, &u.Username, &u.Password, &u.ListenerID, &u.Enabled, &u.ExpiresAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Password, &u.ListenerID, &u.Enabled, &u.ExpiresAt,
+			&u.TrafficLimit, &u.TrafficUsed); err != nil {
 			continue
 		}
 		c, _ := s.creds(r, u)
@@ -251,6 +264,72 @@ func (s *Server) extendUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, creds)
 }
 
+// trafficReq drives the quota from the bot: top-up after a customer buys
+// more traffic (add_gb), a hard re-set of the quota (set_gb), or resetting
+// the spent counter (reset_used, e.g. start of a new billing period).
+type trafficReq struct {
+	AddGB     *float64 `json:"add_gb"`
+	SetGB     *float64 `json:"set_gb"`
+	ResetUsed *bool    `json:"reset_used"`
+}
+
+func (s *Server) trafficUser(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.loadUserByID(w, r)
+	if !ok {
+		return
+	}
+	var req trafficReq
+	if err := decodeBody(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
+		return
+	}
+	if req.AddGB == nil && req.SetGB == nil && req.ResetUsed == nil {
+		writeErr(w, http.StatusBadRequest, "nothing to do: pass add_gb, set_gb or reset_used")
+		return
+	}
+	for _, v := range []*float64{req.AddGB, req.SetGB} {
+		if v != nil && (*v < 0 || *v > 1e6) {
+			writeErr(w, http.StatusBadRequest, "gb values must be 0..1000000")
+			return
+		}
+	}
+	if req.AddGB != nil && *req.AddGB == 0 {
+		writeErr(w, http.StatusBadRequest, "add_gb must be > 0")
+		return
+	}
+
+	newLimit := u.TrafficLimit
+	if req.SetGB != nil {
+		newLimit = gbToBytes(*req.SetGB)
+	}
+	if req.AddGB != nil {
+		newLimit += gbToBytes(*req.AddGB)
+	}
+	// Only the limit is written; the used counter keeps accumulating on its
+	// own (the accounter may add bytes between our read and this write).
+	_, err := s.pool.Exec(r.Context(),
+		`UPDATE proxy_users SET traffic_limit=$1 WHERE id=$2`, newLimit, u.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if req.ResetUsed != nil && *req.ResetUsed {
+		if _, err := s.pool.Exec(r.Context(),
+			`UPDATE proxy_users SET traffic_used=0 WHERE id=$1`, u.ID); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	if err := s.applyNow(r.Context()); err != nil {
+		writeErr(w, http.StatusInternalServerError, "traffic updated but apply failed: "+err.Error())
+		return
+	}
+
+	nu, _ := s.loadUserByID(w, r)
+	creds, _ := s.creds(r, nu)
+	writeJSON(w, http.StatusOK, creds)
+}
+
 type rotateReq struct {
 	Password   *bool `json:"password"`    // rotate credentials (default true)
 	ListenerID *int  `json:"listener_id"` // move to another exit/port (optional)
@@ -283,7 +362,7 @@ func (s *Server) rotateUser(w http.ResponseWriter, r *http.Request) {
 
 	if doPassword {
 		if _, err := s.pool.Exec(r.Context(),
-			`UPDATE proxy_users SET password=$1 WHERE id=$2`, randString(passwordAlphabet, 12), u.ID); err != nil {
+			`UPDATE proxy_users SET password=$1 WHERE id=$2`, gen.Password(), u.ID); err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}

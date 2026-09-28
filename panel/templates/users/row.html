@@ -14,9 +14,12 @@
     </td>
     <td class="p-4 text-slate-300">
         {{if eq .TrafficLimit 0}}
-            {{div .TrafficUsed 1048576}} MB / &infin;
+            <span class="text-slate-500 italic">Unlimited</span> <span class="text-xs text-slate-500">({{gb .TrafficUsed}})</span>
         {{else}}
-            {{div .TrafficUsed 1048576}} / {{div .TrafficLimit 1048576}} MB
+            {{if ge .TrafficUsed .TrafficLimit}}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/10 text-red-500 border border-red-500/20" title="quota exhausted — user is cut off until topped up">Exhausted</span>
+            {{end}}
+            <span class="{{if ge .TrafficUsed .TrafficLimit}}text-red-400{{end}}">{{gb .TrafficUsed}} / {{gb .TrafficLimit}}</span>
         {{end}}
     </td>
     <td class="p-4 text-slate-300">

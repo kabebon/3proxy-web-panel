@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,10 +48,15 @@ func StatsHandlers(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	return r
 }
 
-// parseLast100Lines reads the last 100 lines from the log file and parses them.
-// Optionally filters by username.
+// parseLast100Lines reads the last 100 lines from the newest 3proxy log file
+// (logtype D rotates daily: 3proxy.log.YYYY.MM.DD next to the configured
+// path) and parses them. Optionally filters by username.
 func parseLast100Lines(logPath, filterUser string) ([]LogEntry, error) {
-	f, err := os.Open(logPath)
+	path := newestLogFile(logPath)
+	if path == "" {
+		return nil, nil
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		// Log file may not exist yet — return empty, not an error
 		return nil, nil
@@ -60,6 +67,7 @@ func parseLast100Lines(logPath, filterUser string) ([]LogEntry, error) {
 	const maxLines = 100
 	lines := make([]string, 0, maxLines)
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
@@ -83,42 +91,62 @@ func parseLast100Lines(logPath, filterUser string) ([]LogEntry, error) {
 	return entries, nil
 }
 
-// parseLogLine parses a 3proxy log line.
-// Log format: "- +_L%t.%. %N.%p %E %U %C:%c %R:%r %O %I %h %T"
-// Example: 2024-01-15 12:34:56.789 3 0 myuser 192.168.1.100:54321 example.com:443 1024 2048 - -
+// newestLogFile returns the newest existing log file for a configured path:
+// the dated rotation file with the greatest name (3proxy.log.YYYY.MM.DD sorts
+// chronologically), or the plain path itself when no rotation files exist.
+func newestLogFile(logPath string) string {
+	dir := filepath.Dir(logPath)
+	base := filepath.Base(logPath)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	best := ""
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() {
+			continue
+		}
+		if n == base || strings.HasPrefix(n, base+".") {
+			if n > best {
+				best = n
+			}
+		}
+	}
+	if best == "" {
+		return ""
+	}
+	return filepath.Join(dir, best)
+}
+
+// parseLogLine parses a 3proxy log line produced by the generator's
+// logformat "- +_L%t.%. %N.%p %E %U %C:%c %R:%r %O %I %h %T":
+//
+//	1790206426.565 SOCK5.21080 00000 myuser 192.168.1.100:54321 example.com:443 1024 2048 1 CONNECT_...
+//	  unix.ts       svc.port    err   user    src                    dst              out  in
 func parseLogLine(line string) LogEntry {
 	e := LogEntry{Raw: line}
 	parts := strings.Fields(line)
-	if len(parts) < 10 {
+	if len(parts) < 6 {
 		return e
 	}
 
-	// Date + time
-	if len(parts) >= 2 {
-		// Try to parse and format nicely
-		t, err := time.Parse("2006-01-02 15:04:05.000", parts[0]+" "+strings.Split(parts[1], ".")[0])
-		if err == nil {
-			e.Time = t.Format("2006-01-02 15:04:05")
-		} else {
-			e.Time = parts[0] + " " + parts[1]
-		}
+	// Unix timestamp with milliseconds
+	if sec, err := strconv.ParseFloat(parts[0], 64); err == nil {
+		t := time.Unix(int64(sec), int64((sec-float64(int64(sec)))*1e9))
+		e.Time = t.Format("2006-01-02 15:04:05")
+	} else {
+		e.Time = parts[0]
 	}
 
-	// Fields: [date] [time] [pid] [errorcode] [user] [src:port] [dst:port] [bytes_out] [bytes_in] ...
-	if len(parts) > 4 {
-		e.User = parts[4]
-	}
-	if len(parts) > 5 {
-		e.SourceIP = parts[5]
-	}
-	if len(parts) > 6 {
-		e.Destination = parts[6]
-	}
+	e.User = parts[3]
+	e.SourceIP = parts[4]
+	e.Destination = parts[5]
 	if len(parts) > 7 {
-		e.BytesSent = formatBytes(parts[7])
+		e.BytesSent = formatBytes(parts[6])
 	}
 	if len(parts) > 8 {
-		e.BytesRecv = formatBytes(parts[8])
+		e.BytesRecv = formatBytes(parts[7])
 	}
 
 	return e

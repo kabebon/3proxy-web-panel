@@ -38,15 +38,16 @@ func (s *Server) Mount(r chi.Router) {
 	a.Get("/health", s.health)
 	a.Post("/apply", s.apply)
 
-	a.Route("/users", func(a chi.Router) {
-		a.Get("/", s.listUsers)
-		a.Post("/", s.createUser)
-		a.Get("/{id}", s.getUser)
-		a.Patch("/{id}", s.patchUser)
-		a.Delete("/{id}", s.deleteUser)
-		a.Post("/{id}/extend", s.extendUser)
-		a.Post("/{id}/rotate", s.rotateUser)
-	})
+		a.Route("/users", func(a chi.Router) {
+			a.Get("/", s.listUsers)
+			a.Post("/", s.createUser)
+			a.Get("/{id}", s.getUser)
+			a.Patch("/{id}", s.patchUser)
+			a.Delete("/{id}", s.deleteUser)
+			a.Post("/{id}/extend", s.extendUser)
+			a.Post("/{id}/rotate", s.rotateUser)
+			a.Post("/{id}/traffic", s.trafficUser)
+		})
 
 	a.Route("/upstreams", func(a chi.Router) {
 		a.Get("/", s.listUpstreams)
@@ -136,17 +137,19 @@ func (s *Server) apply(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
-	var users, listeners, upstreams int
+	var users, listeners, upstreams, exhausted int
 	s.pool.QueryRow(r.Context(), "SELECT COUNT(*) FROM proxy_users WHERE enabled AND (expires_at IS NULL OR expires_at > NOW())").Scan(&users)
 	s.pool.QueryRow(r.Context(), "SELECT COUNT(*) FROM listeners WHERE enabled").Scan(&listeners)
 	s.pool.QueryRow(r.Context(), "SELECT COUNT(*) FROM upstreams WHERE enabled").Scan(&upstreams)
+	s.pool.QueryRow(r.Context(), "SELECT COUNT(*) FROM proxy_users WHERE enabled AND traffic_limit > 0 AND traffic_used >= traffic_limit").Scan(&exhausted)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":           "ok",
-		"proxy_running":    proxy.IsProxyRunning(s.cfg.ProxyContainerName),
-		"users_active":     users,
-		"listeners":        listeners,
-		"upstreams":        upstreams,
-		"healthcheck_mode": s.cfg.HealthcheckMode,
+		"status":               "ok",
+		"proxy_running":        proxy.IsProxyRunning(s.cfg.ProxyContainerName),
+		"users_active":         users,
+		"listeners":            listeners,
+		"upstreams":            upstreams,
+		"users_quota_cut_off":  exhausted,
+		"healthcheck_mode":     s.cfg.HealthcheckMode,
 	})
 }
 
@@ -188,11 +191,26 @@ func (s *Server) fingerprint(ctx context.Context) (string, error) {
 	if err := s.pool.QueryRow(ctx, "SELECT COUNT(*) FROM upstreams WHERE enabled").Scan(&upstreams); err != nil {
 		return "", err
 	}
-	return fmtFingerprint(users, expired, listeners, upstreams), nil
+	// Sets, not just counts: a swap (one user expires while another is
+	// extended in the same window) keeps the counts equal but changes the
+	// config content — the hash catches it.
+	expiredSet := expiredUserSet(ctx, s.pool)
+	quotaSet := exhaustedSet(ctx, s.pool)
+	return fmtFingerprint(users, expired, listeners, upstreams, expiredSet, quotaSet), nil
 }
 
-func fmtFingerprint(users, expired, listeners, upstreams int) string {
-	b, _ := json.Marshal([4]int{users, expired, listeners, upstreams})
+// expiredUserSet returns the comma-joined usernames currently cut off by
+// expiry (empty string = none).
+func expiredUserSet(ctx context.Context, q rowQuerier) string {
+	var set string
+	_ = q.QueryRow(ctx,
+		`SELECT COALESCE(string_agg(username, ',' ORDER BY username), '')
+		 FROM proxy_users WHERE enabled AND expires_at IS NOT NULL AND expires_at <= NOW()`).Scan(&set)
+	return set
+}
+
+func fmtFingerprint(users, expired, listeners, upstreams int, expiredSet, quotaSet string) string {
+	b, _ := json.Marshal([6]any{users, expired, listeners, upstreams, expiredSet, quotaSet})
 	return string(b)
 }
 

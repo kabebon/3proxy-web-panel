@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strconv"
 )
 
 var tmpls *template.Template
@@ -48,6 +49,18 @@ func templateFuncs() template.FuncMap {
 		},
 		"mul": func(a, b int64) int64 {
 			return a * b
+		},
+		// gb renders a byte count as gigabytes for table cells.
+		"gb": func(b int64) string {
+			return strconv.FormatFloat(float64(b)/1073741824, 'f', 2, 64) + " GB"
+		},
+		// gbFromBytes renders a byte count as a plain GB number for number
+		// inputs (no unit suffix).
+		"gbFromBytes": func(b int64) string {
+			if b == 0 {
+				return "0"
+			}
+			return strconv.FormatFloat(float64(b)/1073741824, 'f', -1, 64)
 		},
 	}
 }

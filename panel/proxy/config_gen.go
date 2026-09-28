@@ -11,6 +11,12 @@ import (
 	"panel/models"
 )
 
+// activeUserWhere selects proxy users that must exist in the live config:
+// enabled, subscription not expired and inside the traffic quota. An
+// exhausted user is cut off the same way an expired one is — the account
+// simply stops resolving in 3proxy's user list (407 on auth).
+const activeUserWhere = "enabled = TRUE AND (expires_at IS NULL OR expires_at > NOW()) AND (traffic_limit <= 0 OR traffic_used < traffic_limit)"
+
 func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config) (string, error) {
 	var sb strings.Builder
 
@@ -25,8 +31,9 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 	sb.WriteString("counter /var/log/3proxy/3proxy.traf M\n")
 	sb.WriteString("maxconn 100\n\n")
 
-	// Users definition — expired subscriptions never reach the config
-	rows, err := pool.Query(ctx, "SELECT username, password FROM proxy_users WHERE enabled = TRUE AND (expires_at IS NULL OR expires_at > NOW())")
+	// Users definition — expired subscriptions and exhausted quotas never
+	// reach the config
+	rows, err := pool.Query(ctx, "SELECT username, password FROM proxy_users WHERE "+activeUserWhere)
 	if err != nil {
 		return "", err
 	}
@@ -87,7 +94,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 	for _, l := range listeners {
 		sb.WriteString(fmt.Sprintf("# Listener %s\n", l.Name))
 
-		urow, err := pool.Query(ctx, "SELECT id, username, bandwidth_in, bandwidth_out FROM proxy_users WHERE enabled = TRUE AND (expires_at IS NULL OR expires_at > NOW()) AND listener_id = $1", l.ID)
+		urow, err := pool.Query(ctx, "SELECT id, username, bandwidth_in, bandwidth_out FROM proxy_users WHERE "+activeUserWhere+" AND listener_id = $1", l.ID)
 		if err != nil {
 			return "", err
 		}
@@ -257,7 +264,10 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 func parentLine(weight int, u models.Upstream) string {
 	ptype := "http"
 	if u.Type == "socks5" {
-		ptype = "socks5"
+		// "+" = resolve DNS via the parent. Plain socks5 was tried and works
+		// only for IP targets; creds+socks5+ is the form verified E2E on the
+		// real-us upstream (stage 2).
+		ptype = "socks5+"
 	}
 	line := fmt.Sprintf("parent %d %s %s %d", weight, ptype, u.Host, u.Port)
 	if u.Username != "" {

@@ -69,7 +69,7 @@ type ProxyUser struct {
 	AllowedIPs   string
 	Enabled      bool
 	TrafficLimit int64 // bytes, 0=unlimited
-	TrafficUsed  int64 // bytes
+	TrafficUsed  int64 // bytes, accumulated by the log accounter
 	ExpiresAt    *time.Time
 	CreatedAt    time.Time
 }

@@ -18,6 +18,7 @@ type Config struct {
 	APITokens          []string
 	PublicHost         string
 	ReaperSeconds      int
+	TrafficSeconds     int // traffic accounting tick, seconds
 	HealthcheckMode    string   // off | monitor | auto
 	HealthcheckSeconds int      // interval between check rounds
 	HealthcheckTimeout int      // per-target probe timeout, seconds
@@ -39,6 +40,7 @@ func Load() *Config {
 		ProxyLogPath:       os.Getenv("PROXY_LOG_PATH"),
 		PublicHost:         os.Getenv("PUBLIC_HOST"),
 		ReaperSeconds:      30,
+		TrafficSeconds:     30,
 		HealthcheckMode:    "auto",
 		HealthcheckSeconds: 30,
 		HealthcheckTimeout: 10,
@@ -55,6 +57,9 @@ func Load() *Config {
 	}
 	if n, err := strconv.Atoi(os.Getenv("REAPER_SECONDS")); err == nil && n > 0 {
 		c.ReaperSeconds = n
+	}
+	if n, err := strconv.Atoi(os.Getenv("TRAFFIC_SECONDS")); err == nil && n >= 5 {
+		c.TrafficSeconds = n
 	}
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("HEALTHCHECK_MODE"))) {
 	case "off", "monitor", "auto":
