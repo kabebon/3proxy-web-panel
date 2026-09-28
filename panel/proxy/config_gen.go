@@ -222,7 +222,13 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 			sb.WriteString(b + "\n")
 		}
 
-		sb.WriteString("deny *\n")
+		// deny * closes the ACL only for authenticated listeners.
+		// In open mode (auth none + allow *) there is no deny: the parent line
+		// must remain the last ACL-associated directive so 3proxy attaches the
+		// upstream chain to the allow entry correctly.
+		if len(listenerUsers) > 0 {
+			sb.WriteString("deny *\n")
+		}
 
 		if l.Protocol == "http" {
 			sb.WriteString(fmt.Sprintf("proxy -p%d -i%s\n", l.Port, l.BindIP))
