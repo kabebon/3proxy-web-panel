@@ -247,7 +247,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 func parentLine(weight int, u models.Upstream) string {
 	ptype := "http"
 	if u.Type == "socks5" {
-		ptype = "socks5+"
+		ptype = "socks5"
 	}
 	line := fmt.Sprintf("parent %d %s %s %d", weight, ptype, u.Host, u.Port)
 	if u.Username != "" {
