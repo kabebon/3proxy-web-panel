@@ -25,7 +25,10 @@ func dockerClient() *http.Client {
 func ReloadProxy(containerName string) error {
 	client := dockerClient()
 
-	url := fmt.Sprintf("http://localhost/containers/%s/kill?signal=HUP", containerName)
+	// 3proxy has known bugs with applying auth/ACL changes on SIGHUP (hot reload),
+	// often ignoring parent proxy directives after reload.
+	// We use a fast Docker restart (t=0) to guarantee a clean state.
+	url := fmt.Sprintf("http://localhost/containers/%s/restart?t=0", containerName)
 	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
