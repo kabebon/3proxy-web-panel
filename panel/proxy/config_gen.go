@@ -94,7 +94,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 	for _, l := range listeners {
 		sb.WriteString(fmt.Sprintf("# Listener %s\n", l.Name))
 
-		urow, err := pool.Query(ctx, "SELECT id, username, bandwidth_in, bandwidth_out FROM proxy_users WHERE "+activeUserWhere+" AND listener_id = $1", l.ID)
+		urow, err := pool.Query(ctx, "SELECT username, bandwidth_in, bandwidth_out FROM proxy_users WHERE "+activeUserWhere+" AND listener_id = $1", l.ID)
 		if err != nil {
 			return "", err
 		}
@@ -102,22 +102,23 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 		var listenerUsers []string
 		var bands []string
 		for urow.Next() {
-			var id int
 			var u string
 			var bin, bout int
-			if err := urow.Scan(&id, &u, &bin, &bout); err != nil {
+			if err := urow.Scan(&u, &bin, &bout); err != nil {
 				urow.Close()
 				return "", err
 			}
 			listenerUsers = append(listenerUsers, u)
+			// bandlimin/bandlimout are the forms this 3proxy build parses
+			// (verified empirically); "countin"/"countout" and the old
+			// "bandlim in out user" form are rejected with "Unknown command"
+			// and crash-loop the proxy.
 			if bin > 0 {
 				bands = append(bands, fmt.Sprintf("bandlimin %d %s", bin*1024, u))
 			}
 			if bout > 0 {
 				bands = append(bands, fmt.Sprintf("bandlimout %d %s", bout*1024, u))
 			}
-			bands = append(bands, fmt.Sprintf("countin %d %s", id, u))
-			bands = append(bands, fmt.Sprintf("countout %d %s", id, u))
 		}
 		urow.Close()
 
