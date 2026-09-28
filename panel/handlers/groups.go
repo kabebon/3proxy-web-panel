@@ -163,6 +163,19 @@ func GroupsHandlers(pool *pgxpool.Pool) http.Handler {
 		renderTemplate(w, "group-row", group)
 	})
 
+	// POST /groups/{id}/toggle
+	r.Post("/{id}/toggle", func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if _, err := pool.Exec(r.Context(), "UPDATE upstream_groups SET enabled = NOT enabled WHERE id=$1", id); err != nil {
+			triggerToast(w, "Error: "+err.Error(), "error")
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		gid, _ := strconv.Atoi(id)
+		group, _ := loadGroup(r, pool, gid)
+		renderTemplate(w, "group-row", group)
+	})
+
 	// DELETE /groups/{id}
 	r.Delete("/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
