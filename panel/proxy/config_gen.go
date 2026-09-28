@@ -116,9 +116,12 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 			sb.WriteString("allow " + strings.Join(listenerUsers, ",") + "\n")
 		} else {
 			// Listener with no active users is an open listener (kabebon's
-			// semantics): auth none + allow * instead of an all-denying
+			// semantics): auth iponly + allow * instead of an all-denying
 			// auth strong with an empty user list.
-			sb.WriteString("auth none\n")
+			// Note: "auth iponly" MUST be used instead of "auth none" because
+			// "auth none" skips the ACL walk, causing parent proxy directives
+			// to be ignored (traffic goes direct).
+			sb.WriteString("auth iponly\n")
 			sb.WriteString("flush\n")
 			sb.WriteString("allow *\n")
 		}
