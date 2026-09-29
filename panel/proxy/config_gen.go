@@ -122,6 +122,9 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 		}
 		urow.Close()
 
+		var totalAssigned int
+		_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM proxy_users WHERE listener_id = $1", l.ID).Scan(&totalAssigned)
+
 		if len(listenerUsers) > 0 {
 			sb.WriteString("auth strong\n")
 			sb.WriteString("flush\n")
@@ -129,8 +132,8 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 			// to the LAST ACL entry, so separate "allow user" lines would leave
 			// everyone but the last-listed user bypassing the chain (direct exit).
 			sb.WriteString("allow " + strings.Join(listenerUsers, ",") + "\n")
-		} else {
-			// Listener with no active users is an open listener (kabebon's
+		} else if totalAssigned == 0 {
+			// Listener with NO assigned users is an open listener (kabebon's
 			// semantics): auth iponly + allow * instead of an all-denying
 			// auth strong with an empty user list.
 			// Note: "auth iponly" MUST be used instead of "auth none" because
@@ -139,6 +142,11 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 			sb.WriteString("auth iponly\n")
 			sb.WriteString("flush\n")
 			sb.WriteString("allow *\n")
+		} else {
+			// Users are assigned, but none are active (all disabled/exhausted).
+			// Keep it authenticated but deny everyone by writing no allow.
+			sb.WriteString("auth strong\n")
+			sb.WriteString("flush\n")
 		}
 
 		// Parents must come directly after the allow rules: 3proxy attaches the
@@ -244,7 +252,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 		// In open mode (auth none + allow *) there is no deny: the parent line
 		// must remain the last ACL-associated directive so 3proxy attaches the
 		// upstream chain to the allow entry correctly.
-		if len(listenerUsers) > 0 {
+		if len(listenerUsers) > 0 || totalAssigned > 0 {
 			sb.WriteString("deny *\n")
 		}
 
