@@ -5,7 +5,7 @@
 # Pin the release explicitly — behavior of a proxy core must be reproducible.
 
 FROM alpine:3.19 AS builder
-RUN apk add --no-cache build-base git
+RUN apk add --no-cache build-base git linux-headers
 ARG TPROXY_VERSION=1.0.0
 RUN git clone --depth 1 --branch ${TPROXY_VERSION} https://github.com/3proxy/3proxy /tmp/3proxy \
     && cd /tmp/3proxy \
