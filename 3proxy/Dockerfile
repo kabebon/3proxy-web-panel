@@ -10,7 +10,7 @@ ARG TPROXY_VERSION=1.0.0
 RUN git clone --depth 1 --branch ${TPROXY_VERSION} https://github.com/3proxy/3proxy /tmp/3proxy \
     && cd /tmp/3proxy \
     && make -f Makefile.Linux \
-    && cp src/bin/3proxy /usr/local/bin/3proxy
+    && cp bin/3proxy /usr/local/bin/3proxy
 
 FROM alpine:3.19
 COPY --from=builder /usr/local/bin/3proxy /usr/bin/3proxy
