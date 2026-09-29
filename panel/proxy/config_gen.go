@@ -94,7 +94,7 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 	for _, l := range listeners {
 		sb.WriteString(fmt.Sprintf("# Listener %s\n", l.Name))
 
-		urow, err := pool.Query(ctx, "SELECT username, bandwidth_in, bandwidth_out FROM proxy_users WHERE "+activeUserWhere+" AND listener_id = $1", l.ID)
+		urow, err := pool.Query(ctx, "SELECT username, bandwidth_in, bandwidth_out, traffic_limit, traffic_used FROM proxy_users WHERE "+activeUserWhere+" AND listener_id = $1", l.ID)
 		if err != nil {
 			return "", err
 		}
@@ -104,20 +104,36 @@ func GenerateConfig(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 		for urow.Next() {
 			var u string
 			var bin, bout int
-			if err := urow.Scan(&u, &bin, &bout); err != nil {
+			var limit, used int64
+			if err := urow.Scan(&u, &bin, &bout, &limit, &used); err != nil {
 				urow.Close()
 				return "", err
 			}
 			listenerUsers = append(listenerUsers, u)
-			// bandlimin/bandlimout are the forms this 3proxy build parses
-			// (verified empirically); "countin"/"countout" and the old
-			// "bandlim in out user" form are rejected with "Unknown command"
-			// and crash-loop the proxy.
+			// bandlimin/bandlimout are the forms 3proxy 1.0.0 parses; the
+			// old "bandlim in out user" form is rejected ("Unknown command").
 			if bin > 0 {
 				bands = append(bands, fmt.Sprintf("bandlimin %d %s", bin*1024, u))
 			}
 			if bout > 0 {
 				bands = append(bands, fmt.Sprintf("bandlimout %d %s", bout*1024, u))
+			}
+			// Byte-level quota enforcement, native to the proxy (the
+			// "Remnawave-style" hard cut): countall caps the user's remaining
+			// bytes in-process — an in-flight transfer is cut mid-stream at
+			// the cap and new connections are refused once it is reached.
+			// Counter number 0 = not persisted to any counter file, type N =
+			// never rotated: the panel stays the source of billing truth
+			// (log accounter) and re-seeds the remaining allowance on every
+			// config apply (top-ups apply immediately). The limit granularity
+			// of this ACL is whole MB, hence ceil.
+			if limit > 0 {
+				remaining := limit - used // activeUserWhere guarantees > 0
+				mb := (remaining + 1048575) / 1048576
+				if mb < 1 {
+					mb = 1
+				}
+				bands = append(bands, fmt.Sprintf("countall 0 N %d %s", mb, u))
 			}
 		}
 		urow.Close()
